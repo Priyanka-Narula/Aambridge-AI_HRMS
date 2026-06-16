@@ -1,10 +1,29 @@
 Activate virtual environment
-    source venv/Scripts/activate
+    source venv/Scripts/activate   # Windows: .venv\Scripts\activate
 
-To run backend 
+## Database (PostgreSQL)
+
+Start PostgreSQL with Docker:
+
+    docker compose up -d
+
+Copy environment config:
+
+    copy backend\.env.example backend\.env
+
+Run migrations:
+
+    cd backend
+    alembic upgrade head
+
+## Backend
+
     cd backend
     uvicorn app.main:app --reload
 
-To run frontend
+Health check: `GET /` and `GET /health/db`
+
+## Frontend
+
     cd frontend
     npm run dev
