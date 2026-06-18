@@ -1,6 +1,3 @@
-# Aambridge AI HRMS
-
-HR platform with a FastAPI backend, Vue 3 frontend, and PostgreSQL database.
 
 ## Prerequisites
 
