@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: hrms
       POSTGRES_DB: hrms
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -17,5 +17,34 @@ services:
       timeout: 5s
       retries: 5
 
+  minio:
+    image: minio/minio:latest
+    container_name: hrms-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: hrms
+      MINIO_ROOT_PASSWORD: hrms_minio_secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: hrms-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3 &&
+      mc alias set local http://minio:9000 hrms hrms_minio_secret &&
+      mc mb local/hrms-cvs --ignore-existing &&
+      mc anonymous set none local/hrms-cvs
+      "
+    restart: "no"
+
 volumes:
   postgres_data:
+  minio_data:
