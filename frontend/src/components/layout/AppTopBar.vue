@@ -1,0 +1,526 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+
+defineEmits<{
+  toggleSidebar: []
+}>()
+
+const auth = useAuthStore()
+const showUserMenu = ref(false)
+const showNotifications = ref(false)
+
+const notifications = [
+  { id: 1, text: 'New candidate applied for Senior Developer', time: '5m ago' },
+  { id: 2, text: 'Interview scheduled with Elena Brooks', time: '1h ago' },
+  { id: 3, text: 'Pipeline stage updated: Offer Extended', time: '3h ago' },
+]
+
+function onDateChange(field: 'start' | 'end', event: Event) {
+  const value = (event.target as HTMLInputElement).value
+  auth.setDateRange({ ...auth.dateRange, [field]: value })
+}
+
+function toggleUserMenu() {
+  showUserMenu.value = !showUserMenu.value
+  showNotifications.value = false
+}
+
+function toggleNotifications() {
+  showNotifications.value = !showNotifications.value
+  showUserMenu.value = false
+}
+
+function closeMenus() {
+  showUserMenu.value = false
+  showNotifications.value = false
+}
+</script>
+
+<template>
+  <header class="topbar">
+    <div class="topbar__left">
+      <button
+        type="button"
+        class="topbar__menu-btn"
+        aria-label="Toggle navigation menu"
+        @click="$emit('toggleSidebar')"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
+      <div class="topbar__brand">
+        <h1 class="topbar__title">Aambridge-AI_HRMS</h1>
+        <span class="topbar__badge">{{ auth.roleLabel }}</span>
+      </div>
+    </div>
+
+    <div class="topbar__center">
+      <div class="topbar__date-filter" role="group" aria-label="Date range filter">
+        <svg class="topbar__date-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <path d="M16 2v4M8 2v4M3 10h18" />
+        </svg>
+        <label class="sr-only" for="date-start">Start date</label>
+        <input
+          id="date-start"
+          type="date"
+          class="topbar__date-input"
+          :value="auth.dateRange.start"
+          :max="auth.dateRange.end"
+          @change="onDateChange('start', $event)"
+        />
+        <span class="topbar__date-sep" aria-hidden="true">to</span>
+        <label class="sr-only" for="date-end">End date</label>
+        <input
+          id="date-end"
+          type="date"
+          class="topbar__date-input"
+          :value="auth.dateRange.end"
+          :min="auth.dateRange.start"
+          @change="onDateChange('end', $event)"
+        />
+      </div>
+    </div>
+
+    <div class="topbar__actions">
+      <div class="topbar__action-wrap">
+        <button
+          type="button"
+          class="topbar__icon-btn"
+          aria-label="Notifications"
+          :aria-expanded="showNotifications"
+          @click="toggleNotifications"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+          <span v-if="auth.notificationCount > 0" class="topbar__badge-count">
+            {{ auth.notificationCount }}
+          </span>
+        </button>
+
+        <div v-if="showNotifications" class="topbar__dropdown topbar__dropdown--notifications">
+          <div class="topbar__dropdown-header">Notifications</div>
+          <ul class="topbar__notif-list">
+            <li v-for="n in notifications" :key="n.id" class="topbar__notif-item">
+              <p>{{ n.text }}</p>
+              <span>{{ n.time }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <RouterLink to="/settings" class="topbar__icon-btn" aria-label="Settings" @click="closeMenus">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+        </svg>
+      </RouterLink>
+
+      <div class="topbar__action-wrap">
+        <button
+          type="button"
+          class="topbar__user-btn"
+          :aria-expanded="showUserMenu"
+          aria-label="User menu"
+          @click="toggleUserMenu"
+        >
+          <span class="topbar__avatar">{{ auth.user.avatarInitials }}</span>
+          <span class="topbar__user-info">
+            <span class="topbar__user-name">{{ auth.user.name }}</span>
+            <span class="topbar__user-role">{{ auth.roleLabel }}</span>
+          </span>
+          <svg class="topbar__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+
+        <div v-if="showUserMenu" class="topbar__dropdown topbar__dropdown--user">
+          <div class="topbar__dropdown-user-header">
+            <span class="topbar__avatar topbar__avatar--lg">{{ auth.user.avatarInitials }}</span>
+            <div>
+              <strong>{{ auth.user.name }}</strong>
+              <span>{{ auth.user.email }}</span>
+            </div>
+          </div>
+          <hr class="topbar__dropdown-divider" />
+          <RouterLink to="/settings" class="topbar__dropdown-link" @click="closeMenus">Profile & Settings</RouterLink>
+          <button type="button" class="topbar__dropdown-link topbar__dropdown-link--muted">Sign out</button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="showUserMenu || showNotifications"
+      class="topbar__overlay"
+      @click="closeMenus"
+    />
+  </header>
+</template>
+
+<style scoped>
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: var(--hrms-topbar-height);
+  padding: 0 20px 0 16px;
+  background: var(--hrms-surface-elevated);
+  border-bottom: 1px solid var(--hrms-border);
+  box-shadow: var(--hrms-shadow-sm);
+}
+
+.topbar__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.topbar__menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: var(--hrms-radius-sm);
+  color: var(--hrms-text);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--hrms-transition);
+}
+
+.topbar__menu-btn:hover {
+  background: var(--hrms-secondary);
+}
+
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.topbar__title {
+  margin: 0;
+  font-family: var(--hrms-font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--hrms-primary-dark);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.01em;
+}
+
+.topbar__badge {
+  display: none;
+  padding: 3px 10px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hrms-primary);
+  background: var(--hrms-secondary);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.topbar__center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.topbar__date-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--hrms-surface-muted);
+  border: 1px solid var(--hrms-border);
+  border-radius: var(--hrms-radius-md);
+}
+
+.topbar__date-icon {
+  color: var(--hrms-primary-muted);
+  flex-shrink: 0;
+}
+
+.topbar__date-input {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.8rem;
+  color: var(--hrms-text);
+  cursor: pointer;
+}
+
+.topbar__date-input:focus {
+  outline: none;
+}
+
+.topbar__date-sep {
+  font-size: 0.75rem;
+  color: var(--hrms-text-muted);
+}
+
+.topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar__action-wrap {
+  position: relative;
+}
+
+.topbar__icon-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: var(--hrms-radius-sm);
+  color: var(--hrms-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background var(--hrms-transition),
+    color var(--hrms-transition);
+}
+
+.topbar__icon-btn:hover {
+  color: var(--hrms-primary);
+  background: var(--hrms-secondary);
+}
+
+.topbar__badge-count {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  color: #fff;
+  background: var(--hrms-primary);
+  border-radius: 999px;
+}
+
+.topbar__user-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid var(--hrms-border);
+  border-radius: var(--hrms-radius-md);
+  background: var(--hrms-surface-elevated);
+  cursor: pointer;
+  transition: border-color var(--hrms-transition);
+}
+
+.topbar__user-btn:hover {
+  border-color: var(--hrms-primary-muted);
+}
+
+.topbar__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--hrms-primary-dark);
+  background: linear-gradient(135deg, var(--hrms-accent-soft) 0%, var(--hrms-secondary-deep) 100%);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.topbar__avatar--lg {
+  width: 40px;
+  height: 40px;
+  font-size: 0.85rem;
+}
+
+.topbar__user-info {
+  display: none;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.topbar__user-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--hrms-text);
+  line-height: 1.2;
+}
+
+.topbar__user-role {
+  font-size: 0.7rem;
+  color: var(--hrms-text-muted);
+}
+
+.topbar__chevron {
+  display: none;
+  color: var(--hrms-text-muted);
+}
+
+.topbar__dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 300;
+  min-width: 280px;
+  background: var(--hrms-surface-elevated);
+  border: 1px solid var(--hrms-border);
+  border-radius: var(--hrms-radius-lg);
+  box-shadow: var(--hrms-shadow-lg);
+  overflow: hidden;
+}
+
+.topbar__dropdown-header {
+  padding: 14px 16px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  border-bottom: 1px solid var(--hrms-border);
+}
+
+.topbar__notif-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.topbar__notif-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--hrms-border);
+}
+
+.topbar__notif-item:last-child {
+  border-bottom: none;
+}
+
+.topbar__notif-item p {
+  margin: 0 0 4px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.topbar__notif-item span {
+  font-size: 0.75rem;
+  color: var(--hrms-text-muted);
+}
+
+.topbar__dropdown-user-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.topbar__dropdown-user-header strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.topbar__dropdown-user-header span {
+  font-size: 0.8rem;
+  color: var(--hrms-text-muted);
+}
+
+.topbar__dropdown-divider {
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--hrms-border);
+}
+
+.topbar__dropdown-link {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  color: var(--hrms-text);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--hrms-transition);
+}
+
+.topbar__dropdown-link:hover {
+  background: var(--hrms-secondary);
+}
+
+.topbar__dropdown-link--muted {
+  color: var(--hrms-text-muted);
+}
+
+.topbar__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (min-width: 768px) {
+  .topbar__badge {
+    display: inline-block;
+  }
+
+  .topbar__user-info {
+    display: flex;
+  }
+
+  .topbar__chevron {
+    display: block;
+  }
+}
+
+@media (min-width: 1024px) {
+  .topbar__menu-btn {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .topbar__center {
+    display: none;
+  }
+
+  .topbar__title {
+    font-size: 1rem;
+  }
+}
+</style>
