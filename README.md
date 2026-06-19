@@ -104,10 +104,16 @@ copy .env.example .env
 cp .env.example .env
 ```
 
-Default `DATABASE_URL` in `.env.example`:
+Default backend environment values in `.env.example`:
 
 ```
-postgresql://hrms:hrms@localhost:5432/hrms
+DATABASE_URL=postgresql://hrms:hrms@localhost:5433/hrms
+DB_ECHO=false
+MINIO_ENDPOINT=localhost:9000
+MINIO_ACCESS_KEY=hrms
+MINIO_SECRET_KEY=hrms_minio_secret
+MINIO_BUCKET=hrms-cvs
+MINIO_SECURE=false
 ```
 
 Run database migrations (creates tables and seed data):
@@ -132,6 +138,27 @@ Health checks:
 - `GET /test-upload` — browser CV upload test page
 
 API docs: `http://127.0.0.1:8000/docs`
+
+## Local CV Dropbox flow
+
+Use the built-in upload page to test CV ingestion end-to-end:
+
+1. Open `http://127.0.0.1:8000/test-upload`
+2. Upload a `.pdf` CV
+3. Click **Extract Candidate Info**
+4. Confirm response includes `storage_uri` (for example `s3://hrms-cvs/cvs/<uuid>/resume.pdf`)
+
+What happens after upload:
+
+- PDF is saved to MinIO bucket `hrms-cvs`
+- Text is extracted using PyMuPDF
+- API returns filename, character count, text preview, and MinIO object location
+
+To verify files in MinIO:
+
+- Open MinIO Console: `http://localhost:9001`
+- Sign in with `hrms` / `hrms_minio_secret`
+- Navigate to bucket `hrms-cvs` and folder prefix `cvs/`
 
 ## 3. Frontend setup
 
@@ -200,6 +227,12 @@ Set these in `backend/.env` (never commit `.env`).
 - Ensure MinIO is running: `docker compose ps`
 - Open http://localhost:9001 and confirm bucket `hrms-cvs` exists
 - Check `MINIO_*` values in `backend/.env` match `docker-compose.yml`
+
+**`/health/storage` returns 404**
+
+- A stale backend process is running older code
+- Stop all old Uvicorn processes and start the backend again from `backend/`
+- Verify with `GET /health/storage` before testing uploads
 
 **Alembic command not found**
 
