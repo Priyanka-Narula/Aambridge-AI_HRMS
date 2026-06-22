@@ -8,7 +8,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    DATABASE_URL: str = "postgresql://hrms:hrms@localhost:5432/hrms"
+    DATABASE_URL: str = "postgresql://hrms:hrms@localhost:5433/hrms"
     DB_ECHO: bool = False
 
     MINIO_ENDPOINT: str = "localhost:9000"
@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = "hrms_minio_secret"
     MINIO_BUCKET: str = "hrms-cvs"
     MINIO_SECURE: bool = False
+    GOOGLE_DRIVE_SYNC_DIR: str | None = None
 
 
 settings = Settings()

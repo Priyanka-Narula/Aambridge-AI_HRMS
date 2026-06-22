@@ -1,16 +1,23 @@
 import logging
+import re
 import sys
 from contextlib import asynccontextmanager
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
 
 import fitz
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from minio.error import S3Error
+from pydantic import BaseModel, EmailStr, ValidationError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.storage import get_storage, init_storage
+from app.models.candidate import Candidate
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +36,10 @@ app = FastAPI(
 
 PREVIEW_SNIPPET_LENGTH = 300
 PARSING_ENGINE_BORDER = "--- [AI PARSING ENGINE] ---"
+EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+PHONE_PATTERN = re.compile(r"(?:\+?\d[\d\-\s]{8,}\d)")
+LINKEDIN_PATTERN = re.compile(r"https?://(?:[\w]+\.)?linkedin\.com/[^\s]+", re.IGNORECASE)
+EXPERIENCE_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)", re.IGNORECASE)
 
 
 def log_extracted_text(raw_text: str) -> None:
@@ -324,6 +335,31 @@ def test_upload_page() -> str:
 </html>"""
 
 
+class CandidateDraft(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+    phone: str | None = None
+    linkedin_url: str | None = None
+    current_location: str | None = None
+    total_experience_years: Decimal | None = None
+    resume_url: str
+    source: str | None = None
+    candidate_status: str = "pending_approval"
+
+
+class CandidateApprovalRequest(BaseModel):
+    candidate: CandidateDraft
+    created_by: str | None = None
+
+
+class DriveSyncRequest(BaseModel):
+    folder_path: str | None = None
+    max_files: int = 25
+    auto_approve: bool = False
+    created_by: str | None = "drive-sync-ingestor"
+
+
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     """Read PDF bytes from memory and concatenate text from every page."""
     text_parts: list[str] = []
@@ -335,53 +371,230 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     return "\n".join(text_parts).strip()
 
 
+def build_text_preview(raw_text: str) -> str:
+    preview = raw_text[:PREVIEW_SNIPPET_LENGTH]
+    if len(raw_text) > PREVIEW_SNIPPET_LENGTH:
+        preview += "…"
+    return preview
+
+
+def parse_candidate_from_text(raw_text: str, storage_uri: str, source: str) -> dict[str, Any]:
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+
+    email_match = EMAIL_PATTERN.search(raw_text)
+    email = email_match.group(0).lower() if email_match else None
+
+    name_candidate = ""
+    for line in lines[:12]:
+        if "@" in line or len(line.split()) < 2:
+            continue
+        if any(token in line.lower() for token in ("resume", "curriculum", "cv", "profile", "experience")):
+            continue
+        name_candidate = line
+        break
+
+    if not name_candidate and email:
+        local = re.sub(r"[^a-zA-Z ]", " ", email.split("@")[0]).strip()
+        name_candidate = local.title()
+
+    name_parts = [part for part in re.split(r"\s+", name_candidate) if part]
+    first_name = name_parts[0] if name_parts else ""
+    last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else "Unknown"
+
+    phone_match = PHONE_PATTERN.search(raw_text)
+    linkedin_match = LINKEDIN_PATTERN.search(raw_text)
+    experience_match = EXPERIENCE_PATTERN.search(raw_text)
+
+    location_candidate = None
+    for line in lines[1:10]:
+        lower = line.lower()
+        if "@" in line or "linkedin.com" in lower:
+            continue
+        if PHONE_PATTERN.search(line):
+            continue
+        if len(line) <= 80:
+            location_candidate = line
+            break
+
+    return {
+        "first_name": first_name,
+        "last_name": last_name,
+        "email": email,
+        "phone": phone_match.group(0).strip() if phone_match else None,
+        "linkedin_url": linkedin_match.group(0).strip() if linkedin_match else None,
+        "current_location": location_candidate,
+        "total_experience_years": Decimal(experience_match.group(1)) if experience_match else None,
+        "resume_url": storage_uri,
+        "source": source,
+        "candidate_status": "pending_approval",
+    }
+
+
+def validate_candidate_draft(candidate_data: dict[str, Any]) -> tuple[CandidateDraft | None, list[str]]:
+    errors: list[str] = []
+    try:
+        draft = CandidateDraft(**candidate_data)
+    except ValidationError as exc:
+        draft = None
+        errors.extend(f"{'.'.join(str(part) for part in err['loc'])}: {err['msg']}" for err in exc.errors())
+    return draft, errors
+
+
+def save_candidate_record(db: Session, draft: CandidateDraft, created_by: str | None) -> Candidate:
+    existing = db.query(Candidate).filter(Candidate.email == draft.email).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Candidate with this email already exists.")
+
+    candidate = Candidate(
+        first_name=draft.first_name,
+        last_name=draft.last_name,
+        email=str(draft.email),
+        phone=draft.phone,
+        linkedin_url=draft.linkedin_url,
+        current_location=draft.current_location,
+        total_experience_years=draft.total_experience_years,
+        resume_url=draft.resume_url,
+        source=draft.source,
+        candidate_status=draft.candidate_status,
+        created_by=created_by,
+    )
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+    return candidate
+
+
+def process_cv_document(filename: str, pdf_bytes: bytes, source: str) -> dict[str, Any]:
+    try:
+        storage_info = get_storage().upload_cv(pdf_bytes, filename)
+    except S3Error as exc:
+        logger.exception("MinIO upload failed for %s", filename)
+        raise HTTPException(status_code=503, detail=f"Could not store CV: {exc}") from exc
+
+    try:
+        raw_text = extract_text_from_pdf(pdf_bytes)
+    except Exception as exc:
+        logger.exception("PDF extraction failed for %s", filename)
+        raise HTTPException(status_code=422, detail=f"Could not read PDF: {exc}") from exc
+
+    log_extracted_text(raw_text)
+    logger.info("Source file: %s", filename)
+
+    parsed_candidate = parse_candidate_from_text(
+        raw_text=raw_text,
+        storage_uri=storage_info["storage_uri"],
+        source=source,
+    )
+    draft, validation_errors = validate_candidate_draft(parsed_candidate)
+
+    return {
+        "filename": filename,
+        "status": "parsed" if draft else "validation_failed",
+        "total_characters": len(raw_text),
+        "text_preview": build_text_preview(raw_text),
+        "bucket": storage_info["bucket"],
+        "object_key": storage_info["object_key"],
+        "storage_uri": storage_info["storage_uri"],
+        "candidate_preview": draft.model_dump(mode="json") if draft else parsed_candidate,
+        "validation_errors": validation_errors,
+    }
+
+
 @app.post("/api/v1/candidates/upload")
-async def upload_candidate_cv(file: UploadFile = File(...)):
+async def upload_candidate_cv(
+    file: UploadFile = File(...),
+    auto_approve: bool = False,
+    created_by: str | None = "upload-ui",
+    db: Session = Depends(get_db),
+):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
 
     pdf_bytes = await file.read()
     if not pdf_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    result = process_cv_document(
+        filename=file.filename,
+        pdf_bytes=pdf_bytes,
+        source="google-drive-dropbox",
+    )
 
-    # --- Step 0: Persist PDF to MinIO for later processing ---
-    try:
-        storage_info = get_storage().upload_cv(pdf_bytes, file.filename)
-    except S3Error as exc:
-        logger.exception("MinIO upload failed for %s", file.filename)
-        raise HTTPException(status_code=503, detail=f"Could not store CV: {exc}") from exc
+    if auto_approve:
+        if result["validation_errors"]:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "Candidate data failed validation; approval skipped.",
+                    "validation_errors": result["validation_errors"],
+                    "candidate_preview": result["candidate_preview"],
+                },
+            )
+        draft = CandidateDraft(**result["candidate_preview"])
+        saved = save_candidate_record(db=db, draft=draft, created_by=created_by)
+        result["saved_candidate_id"] = str(saved.id)
+        result["status"] = "approved_and_saved"
 
-    # --- Step 1: PyMuPDF raw text extraction (current milestone) ---
-    try:
-        raw_text = extract_text_from_pdf(pdf_bytes)
-    except Exception as exc:
-        logger.exception("PDF extraction failed for %s", file.filename)
-        raise HTTPException(status_code=422, detail=f"Could not read PDF: {exc}") from exc
+    return result
 
-    log_extracted_text(raw_text)
-    logger.info("Source file: %s", file.filename)
 
-    # --- Milestone A: LLM structured parsing ---
-    # Send raw_text to an LLM (Gemini / Llama) and map the response to our
-    # Candidate schema fields (first_name, last_name, email, skills, etc.).
-    # parsed_candidate: dict = await llm_parse_candidate(raw_text)
+@app.post("/api/v1/candidates/approve")
+def approve_candidate(
+    payload: CandidateApprovalRequest,
+    db: Session = Depends(get_db),
+):
+    candidate = save_candidate_record(
+        db=db,
+        draft=payload.candidate,
+        created_by=payload.created_by,
+    )
+    return {
+        "status": "saved",
+        "candidate_id": str(candidate.id),
+        "email": candidate.email,
+        "candidate_status": candidate.candidate_status,
+    }
 
-    # --- Milestone B: Persist to PostgreSQL ---
-    # Inject get_db, build a Candidate ORM instance from parsed_candidate, and
-    # commit via SQLAlchemy session (skills, education, work_experience tables).
-    # def save_candidate(parsed_candidate: dict, db: Session = Depends(get_db)) -> Candidate:
-    #     ...
 
-    preview = raw_text[:PREVIEW_SNIPPET_LENGTH]
-    if len(raw_text) > PREVIEW_SNIPPET_LENGTH:
-        preview += "…"
+@app.post("/api/v1/candidates/drive-sync/process")
+def process_drive_sync(
+    request: DriveSyncRequest,
+    db: Session = Depends(get_db),
+):
+    folder_path = request.folder_path or settings.GOOGLE_DRIVE_SYNC_DIR
+    if not folder_path:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No folder path provided. Set GOOGLE_DRIVE_SYNC_DIR in backend/.env "
+                "or pass folder_path in request."
+            ),
+        )
+
+    source_dir = Path(folder_path)
+    if not source_dir.exists() or not source_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Drive sync folder not found: {source_dir}")
+
+    pdf_files = sorted(source_dir.rglob("*.pdf"))[: max(1, min(request.max_files, 200))]
+    if not pdf_files:
+        return {"status": "no_files_found", "folder_path": str(source_dir), "processed": []}
+
+    processed: list[dict[str, Any]] = []
+    for pdf_path in pdf_files:
+        result = process_cv_document(
+            filename=pdf_path.name,
+            pdf_bytes=pdf_path.read_bytes(),
+            source="google-drive-folder",
+        )
+        if request.auto_approve and not result["validation_errors"]:
+            draft = CandidateDraft(**result["candidate_preview"])
+            saved = save_candidate_record(db=db, draft=draft, created_by=request.created_by)
+            result["saved_candidate_id"] = str(saved.id)
+            result["status"] = "approved_and_saved"
+        processed.append(result)
 
     return {
-        "filename": file.filename,
-        "status": "extracted",
-        "total_characters": len(raw_text),
-        "text_preview": preview,
-        "bucket": storage_info["bucket"],
-        "object_key": storage_info["object_key"],
-        "storage_uri": storage_info["storage_uri"],
+        "status": "processed",
+        "folder_path": str(source_dir),
+        "processed_count": len(processed),
+        "processed": processed,
     }

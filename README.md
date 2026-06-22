@@ -114,6 +114,7 @@ MINIO_ACCESS_KEY=hrms
 MINIO_SECRET_KEY=hrms_minio_secret
 MINIO_BUCKET=hrms-cvs
 MINIO_SECURE=false
+GOOGLE_DRIVE_SYNC_DIR=
 ```
 
 Run database migrations (creates tables and seed data):
@@ -152,7 +153,18 @@ What happens after upload:
 
 - PDF is saved to MinIO bucket `hrms-cvs`
 - Text is extracted using PyMuPDF
-- API returns filename, character count, text preview, and MinIO object location
+- Candidate fields are parsed and validated into a `candidate_preview`
+- Candidate is saved only after approval via API
+
+Approval and save flow:
+
+1. `POST /api/v1/candidates/upload` to upload/parse and get `candidate_preview`
+2. Review/adjust preview in your candidate form
+3. `POST /api/v1/candidates/approve` to save into `candidates` table
+
+Optional direct save:
+
+- Set `auto_approve=true` on `/api/v1/candidates/upload` to save immediately when validation passes
 
 To verify files in MinIO:
 
@@ -207,6 +219,7 @@ Aambridge-AI_HRMS/
 | `MINIO_SECRET_KEY` | `hrms_minio_secret` | MinIO secret key |
 | `MINIO_BUCKET` | `hrms-cvs` | Bucket for uploaded CV PDFs |
 | `MINIO_SECURE` | `false` | Use HTTPS for MinIO (`true` in production) |
+| `GOOGLE_DRIVE_SYNC_DIR` | empty | Local Google Drive sync folder path for recruiter CV dropbox ingestion |
 
 Set these in `backend/.env` (never commit `.env`).
 
@@ -227,6 +240,13 @@ Set these in `backend/.env` (never commit `.env`).
 - Ensure MinIO is running: `docker compose ps`
 - Open http://localhost:9001 and confirm bucket `hrms-cvs` exists
 - Check `MINIO_*` values in `backend/.env` match `docker-compose.yml`
+
+**Drive link files are not being processed**
+
+- Google Drive links require auth; backend cannot directly crawl folder URLs
+- Sync the Drive folder locally using Google Drive for Desktop
+- Set `GOOGLE_DRIVE_SYNC_DIR` in `backend/.env` to that local folder path
+- Call `POST /api/v1/candidates/drive-sync/process` to ingest synced PDFs into MinIO + parsing pipeline
 
 **`/health/storage` returns 404**
 
