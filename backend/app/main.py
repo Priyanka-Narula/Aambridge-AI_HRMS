@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.storage import get_storage, init_storage
 from app.models.candidate import Candidate
+from app.api.routes import candidates
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,6 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     init_storage()
     yield
-
 
 app = FastAPI(
     title="Aambridge HR Platform API",
@@ -598,3 +598,6 @@ def process_drive_sync(
         "processed_count": len(processed),
         "processed": processed,
     }
+
+
+app.include_router(candidates.router)
