@@ -442,8 +442,26 @@ def validate_candidate_draft(candidate_data: dict[str, Any]) -> tuple[CandidateD
 
 def save_candidate_record(db: Session, draft: CandidateDraft, created_by: str | None) -> Candidate:
     existing = db.query(Candidate).filter(Candidate.email == draft.email).first()
+
+    if not existing and draft.phone:
+        existing = (
+            db.query(Candidate)
+            .filter(
+                Candidate.first_name == draft.first_name,
+                Candidate.last_name == draft.last_name,
+                Candidate.phone == draft.phone,
+            )
+            .first()
+        )
+
     if existing:
-        raise HTTPException(status_code=409, detail="Candidate with this email already exists.")
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Candidate already exists: {existing.first_name} {existing.last_name} "
+                f"(id: {existing.id}, email: {existing.email})."
+            ),
+        )
 
     candidate = Candidate(
         first_name=draft.first_name,
@@ -530,9 +548,16 @@ async def upload_candidate_cv(
                 },
             )
         draft = CandidateDraft(**result["candidate_preview"])
-        saved = save_candidate_record(db=db, draft=draft, created_by=created_by)
-        result["saved_candidate_id"] = str(saved.id)
-        result["status"] = "approved_and_saved"
+        try:
+            saved = save_candidate_record(db=db, draft=draft, created_by=created_by)
+            result["saved_candidate_id"] = str(saved.id)
+            result["status"] = "approved_and_saved"
+        except HTTPException as exc:
+            if exc.status_code == 409:
+                result["status"] = "already_exists"
+                result["message"] = exc.detail
+            else:
+                raise
 
     return result
 
@@ -587,9 +612,16 @@ def process_drive_sync(
         )
         if request.auto_approve and not result["validation_errors"]:
             draft = CandidateDraft(**result["candidate_preview"])
-            saved = save_candidate_record(db=db, draft=draft, created_by=request.created_by)
-            result["saved_candidate_id"] = str(saved.id)
-            result["status"] = "approved_and_saved"
+            try:
+                saved = save_candidate_record(db=db, draft=draft, created_by=request.created_by)
+                result["saved_candidate_id"] = str(saved.id)
+                result["status"] = "approved_and_saved"
+            except HTTPException as exc:
+                if exc.status_code == 409:
+                    result["status"] = "already_exists"
+                    result["message"] = exc.detail
+                else:
+                    raise
         processed.append(result)
 
     return {
