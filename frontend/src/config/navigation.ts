@@ -41,7 +41,7 @@ export const navigationItems: NavItem[] = [
     label: 'Candidates',
     icon: 'candidates',
     route: '/candidates',
-    roles: ['recruiter', 'client'],
+    roles: ['admin', 'recruiter', 'client'],
   },
   {
     id: 'pipeline',

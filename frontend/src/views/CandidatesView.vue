@@ -211,7 +211,6 @@ const candidates = ref<Candidate[]>([
 const selected = ref<Candidate | null>(null)
 const searchQuery = ref('')
 const statusFilter = ref('all')
-const showAddModal = ref(false)
 const activeTab = ref<'overview' | 'experience' | 'education'>('overview')
 
 // ── Computed ──────────────────────────────────────────────────────────────────
@@ -294,12 +293,12 @@ const statuses = ['all', 'active', 'interviewing', 'offered', 'on_hold', 'hired'
             <h1 class="list-title">Candidates</h1>
             <span class="list-count">{{ filtered.length }} records</span>
           </div>
-          <button class="btn-add" @click="showAddModal = true">
+          <RouterLink to="/candidates/upload" class="btn-add">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
-            Add Candidate
-          </button>
+            Upload CV
+          </RouterLink>
         </div>
 
         <!-- Search + Filter -->
@@ -706,6 +705,7 @@ const statuses = ['all', 'active', 'interviewing', 'offered', 'on_hold', 'hired'
   font-size: 0.8125rem;
   font-weight: 600;
   color: #fff;
+  text-decoration: none;
   background: var(--hrms-primary, #6366f1);
   border: none;
   border-radius: 8px;
