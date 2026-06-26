@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import CandidateVerifyForm from '@/components/candidates/CandidateVerifyForm.vue'
-import { deleteCandidate, fetchCandidate, fetchCandidates, updateCandidate } from '@/api/candidates'
+import {
+  deleteCandidate,
+  downloadCandidateResume,
+  fetchCandidate,
+  fetchCandidates,
+  updateCandidate,
+} from '@/api/candidates'
 import type { Candidate, CandidateDraft } from '@/types/candidate'
 import { candidateToDraft, draftToUpdatePayload } from '@/types/candidate'
 
@@ -17,6 +23,7 @@ const showEditModal = ref(false)
 const editDraft = ref<CandidateDraft | null>(null)
 const saving = ref(false)
 const deleting = ref(false)
+const downloadingResume = ref(false)
 
 // ── Data loading ──────────────────────────────────────────────────────────────
 async function loadCandidates() {
@@ -130,6 +137,19 @@ async function saveEdit() {
     error.value = err instanceof Error ? err.message : 'Failed to update candidate'
   } finally {
     saving.value = false
+  }
+}
+
+async function handleDownloadResume() {
+  if (!selected.value?.resume_url) return
+  downloadingResume.value = true
+  error.value = ''
+  try {
+    await downloadCandidateResume(selected.value)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to download resume'
+  } finally {
+    downloadingResume.value = false
   }
 }
 
@@ -324,12 +344,18 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
             <button type="button" class="action-btn action-btn--danger" :disabled="deleting" @click="handleDelete">
               {{ deleting ? 'Deleting…' : 'Delete' }}
             </button>
-            <a v-if="selected.resume_url" :href="selected.resume_url" class="action-btn" target="_blank" rel="noopener">
+            <button
+              v-if="selected.resume_url"
+              type="button"
+              class="action-btn"
+              :disabled="downloadingResume"
+              @click="handleDownloadResume"
+            >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1v8M4 6l3 3 3-3M2 11h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              Resume
-            </a>
+              {{ downloadingResume ? 'Downloading…' : 'Resume' }}
+            </button>
             <a v-if="selected.linkedin_url" :href="selected.linkedin_url" target="_blank" class="action-btn">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.3"/>
