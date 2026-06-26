@@ -45,6 +45,18 @@ const router = createRouter({
           meta: { title: 'Candidates' },
         },
         {
+          path: 'candidates/upload',
+          name: 'cv-upload',
+          component: () => import('@/views/CvUploadView.vue'),
+          meta: { title: 'Upload CV' },
+        },
+        {
+          path: 'candidates/verify',
+          name: 'cv-verify',
+          component: () => import('@/views/CvVerifyView.vue'),
+          meta: { title: 'Verify Candidate' },
+        },
+        {
           path: 'pipeline',
           name: 'pipeline',
           component: () => import('@/views/PlaceholderView.vue'),
