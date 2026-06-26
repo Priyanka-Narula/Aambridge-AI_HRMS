@@ -1,217 +1,44 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-
-// ── Types ────────────────────────────────────────────────────────────────────
-interface Skill {
-  name: string
-  years_experience: number | null
-  proficiency_level: string | null
-}
-
-interface Education {
-  degree: string
-  specialization: string | null
-  institution: string | null
-  start_year: number | null
-  end_year: number | null
-  percentage: number | null
-}
-
-interface WorkExperience {
-  company_name: string
-  designation: string | null
-  start_date: string | null
-  end_date: string | null
-  currently_working: boolean
-  job_description: string | null
-}
-
-interface Candidate {
-  id: string
-  first_name: string
-  last_name: string
-  email: string
-  phone: string | null
-  nationality: string | null
-  date_of_birth: string | null
-  languages_known: string | null
-  visa_status: string | null
-  linkedin_url: string | null
-  current_location: string | null
-  preferred_location: string | null
-  total_experience_years: number | null
-  current_company: string | null
-  current_designation: string | null
-  current_ctc: number | null
-  expected_ctc: number | null
-  notice_period: string | null
-  resume_url: string | null
-  candidate_status: string
-  source: string | null
-  created_by: string | null
-  skills: Skill[]
-  education_records: Education[]
-  work_experiences: WorkExperience[]
-}
-
-// ── Mock data ─────────────────────────────────────────────────────────────────
-const candidates = ref<Candidate[]>([
-  {
-    id: '1',
-    first_name: 'Aisha',
-    last_name: 'Nair',
-    email: 'aisha.nair@email.com',
-    phone: '+91 98765 43210',
-    nationality: 'Indian',
-    date_of_birth: '1995-04-12',
-    languages_known: 'English, Malayalam, Hindi',
-    visa_status: 'Citizen',
-    linkedin_url: 'https://linkedin.com/in/aishanair',
-    current_location: 'Bangalore, India',
-    preferred_location: 'Bangalore, Hyderabad',
-    total_experience_years: 6.5,
-    current_company: 'Infosys',
-    current_designation: 'Senior Software Engineer',
-    current_ctc: 1800000,
-    expected_ctc: 2400000,
-    notice_period: '60 days',
-    resume_url: '#',
-    candidate_status: 'active',
-    source: 'LinkedIn',
-    created_by: 'hr@company.com',
-    skills: [
-      { name: 'React', years_experience: 4, proficiency_level: 'Expert' },
-      { name: 'TypeScript', years_experience: 3, proficiency_level: 'Advanced' },
-      { name: 'Node.js', years_experience: 3, proficiency_level: 'Intermediate' },
-      { name: 'PostgreSQL', years_experience: 2, proficiency_level: 'Intermediate' },
-    ],
-    education_records: [
-      { degree: 'B.Tech', specialization: 'Computer Science', institution: 'NIT Calicut', start_year: 2013, end_year: 2017, percentage: 82.4 },
-    ],
-    work_experiences: [
-      { company_name: 'Infosys', designation: 'Senior Software Engineer', start_date: '2021-06-01', end_date: null, currently_working: true, job_description: 'Led a team of 5 engineers building internal React dashboards and REST APIs.' },
-      { company_name: 'Wipro', designation: 'Software Engineer', start_date: '2017-08-01', end_date: '2021-05-31', currently_working: false, job_description: 'Full-stack development using Angular and Java Spring Boot.' },
-    ],
-  },
-  {
-    id: '2',
-    first_name: 'Rahul',
-    last_name: 'Menon',
-    email: 'rahul.menon@email.com',
-    phone: '+91 99887 76655',
-    nationality: 'Indian',
-    date_of_birth: '1992-11-30',
-    languages_known: 'English, Malayalam',
-    visa_status: 'Citizen',
-    linkedin_url: null,
-    current_location: 'Cochin, India',
-    preferred_location: 'Remote',
-    total_experience_years: 9,
-    current_company: 'TCS',
-    current_designation: 'Tech Lead',
-    current_ctc: 2800000,
-    expected_ctc: 3500000,
-    notice_period: '90 days',
-    resume_url: '#',
-    candidate_status: 'interviewing',
-    source: 'Referral',
-    created_by: 'recruiter@company.com',
-    skills: [
-      { name: 'Java', years_experience: 9, proficiency_level: 'Expert' },
-      { name: 'Spring Boot', years_experience: 7, proficiency_level: 'Expert' },
-      { name: 'AWS', years_experience: 4, proficiency_level: 'Advanced' },
-      { name: 'Kubernetes', years_experience: 2, proficiency_level: 'Intermediate' },
-      { name: 'Kafka', years_experience: 3, proficiency_level: 'Advanced' },
-    ],
-    education_records: [
-      { degree: 'M.Tech', specialization: 'Software Engineering', institution: 'CUSAT', start_year: 2013, end_year: 2015, percentage: 78 },
-      { degree: 'B.Tech', specialization: 'Information Technology', institution: 'MG University', start_year: 2009, end_year: 2013, percentage: 74 },
-    ],
-    work_experiences: [
-      { company_name: 'TCS', designation: 'Tech Lead', start_date: '2019-03-01', end_date: null, currently_working: true, job_description: 'Architecting microservices for a large banking client using Java and Kafka.' },
-      { company_name: 'Cognizant', designation: 'Senior Developer', start_date: '2015-07-01', end_date: '2019-02-28', currently_working: false, job_description: 'Built REST APIs and batch processing pipelines.' },
-    ],
-  },
-  {
-    id: '3',
-    first_name: 'Priya',
-    last_name: 'Sharma',
-    email: 'priya.sharma@gmail.com',
-    phone: '+91 91234 56789',
-    nationality: 'Indian',
-    date_of_birth: '1998-07-22',
-    languages_known: 'English, Hindi',
-    visa_status: null,
-    linkedin_url: 'https://linkedin.com/in/priyasharma',
-    current_location: 'Mumbai, India',
-    preferred_location: 'Mumbai, Pune',
-    total_experience_years: 3.5,
-    current_company: 'Accenture',
-    current_designation: 'Data Analyst',
-    current_ctc: 950000,
-    expected_ctc: 1400000,
-    notice_period: '30 days',
-    resume_url: '#',
-    candidate_status: 'offered',
-    source: 'Naukri',
-    created_by: 'hr@company.com',
-    skills: [
-      { name: 'Python', years_experience: 3, proficiency_level: 'Advanced' },
-      { name: 'SQL', years_experience: 3.5, proficiency_level: 'Expert' },
-      { name: 'Power BI', years_experience: 2, proficiency_level: 'Intermediate' },
-      { name: 'Tableau', years_experience: 1, proficiency_level: 'Beginner' },
-    ],
-    education_records: [
-      { degree: 'B.Sc', specialization: 'Statistics', institution: 'Mumbai University', start_year: 2016, end_year: 2019, percentage: 88 },
-    ],
-    work_experiences: [
-      { company_name: 'Accenture', designation: 'Data Analyst', start_date: '2020-09-01', end_date: null, currently_working: true, job_description: 'Building dashboards and performing statistical analysis for FMCG clients.' },
-    ],
-  },
-  {
-    id: '4',
-    first_name: 'Devika',
-    last_name: 'Pillai',
-    email: 'devika.pillai@email.com',
-    phone: null,
-    nationality: 'Indian',
-    date_of_birth: '1990-03-08',
-    languages_known: 'English, Malayalam, Tamil',
-    visa_status: 'H-1B',
-    linkedin_url: 'https://linkedin.com/in/devikapillai',
-    current_location: 'San Francisco, USA',
-    preferred_location: 'Remote / Bangalore',
-    total_experience_years: 12,
-    current_company: 'Google',
-    current_designation: 'Staff Engineer',
-    current_ctc: null,
-    expected_ctc: null,
-    notice_period: '90 days',
-    resume_url: null,
-    candidate_status: 'on_hold',
-    source: 'Direct',
-    created_by: 'director@company.com',
-    skills: [
-      { name: 'Go', years_experience: 5, proficiency_level: 'Expert' },
-      { name: 'Distributed Systems', years_experience: 8, proficiency_level: 'Expert' },
-      { name: 'gRPC', years_experience: 4, proficiency_level: 'Advanced' },
-      { name: 'Spanner', years_experience: 3, proficiency_level: 'Advanced' },
-    ],
-    education_records: [
-      { degree: 'M.S.', specialization: 'Computer Science', institution: 'Stanford University', start_year: 2013, end_year: 2015, percentage: null },
-      { degree: 'B.Tech', specialization: 'Computer Science', institution: 'IIT Bombay', start_year: 2008, end_year: 2012, percentage: 91 },
-    ],
-    work_experiences: [
-      { company_name: 'Google', designation: 'Staff Engineer', start_date: '2019-01-01', end_date: null, currently_working: true, job_description: 'Leading infra teams on large-scale distributed storage systems.' },
-    ],
-  },
-])
+import { ref, computed, onMounted } from 'vue'
+import CandidateVerifyForm from '@/components/candidates/CandidateVerifyForm.vue'
+import {
+  deleteCandidate,
+  downloadCandidateResume,
+  fetchCandidate,
+  fetchCandidates,
+  updateCandidate,
+} from '@/api/candidates'
+import type { Candidate, CandidateDraft } from '@/types/candidate'
+import { candidateToDraft, draftToUpdatePayload } from '@/types/candidate'
 
 // ── State ─────────────────────────────────────────────────────────────────────
+const candidates = ref<Candidate[]>([])
 const selected = ref<Candidate | null>(null)
 const searchQuery = ref('')
 const statusFilter = ref('all')
 const activeTab = ref<'overview' | 'experience' | 'education'>('overview')
+const loading = ref(true)
+const error = ref('')
+const showEditModal = ref(false)
+const editDraft = ref<CandidateDraft | null>(null)
+const saving = ref(false)
+const deleting = ref(false)
+const downloadingResume = ref(false)
+
+// ── Data loading ──────────────────────────────────────────────────────────────
+async function loadCandidates() {
+  loading.value = true
+  error.value = ''
+  try {
+    candidates.value = await fetchCandidates()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to load candidates'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadCandidates)
 
 // ── Computed ──────────────────────────────────────────────────────────────────
 const filtered = computed(() => {
@@ -231,12 +58,13 @@ const filtered = computed(() => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const statusMeta: Record<string, { label: string; color: string }> = {
-  active:       { label: 'Active',       color: '#22c55e' },
-  interviewing: { label: 'Interviewing', color: '#3b82f6' },
-  offered:      { label: 'Offered',      color: '#a855f7' },
-  on_hold:      { label: 'On Hold',      color: '#f59e0b' },
-  rejected:     { label: 'Rejected',     color: '#ef4444' },
-  hired:        { label: 'Hired',        color: '#14b8a6' },
+  active:            { label: 'Active',            color: '#22c55e' },
+  pending_approval:  { label: 'Pending',           color: '#f59e0b' },
+  interviewing:        { label: 'Interviewing',      color: '#3b82f6' },
+  offered:             { label: 'Offered',           color: '#a855f7' },
+  on_hold:             { label: 'On Hold',           color: '#f59e0b' },
+  rejected:            { label: 'Rejected',          color: '#ef4444' },
+  hired:               { label: 'Hired',             color: '#14b8a6' },
 }
 
 const proficiencyMeta: Record<string, string> = {
@@ -246,15 +74,15 @@ const proficiencyMeta: Record<string, string> = {
   Expert:       '#a78bfa',
 }
 
-const getStatus = (s: string) => statusMeta[s] ?? { label: s, color: '#94a3b8' }
+const getStatus = (s: string) => statusMeta[s] ?? { label: s.replace(/_/g, ' '), color: '#94a3b8' }
 
-const formatCtc = (v: number | null) => {
-  if (v === null) return '—'
+const formatCtc = (v: number | null | undefined) => {
+  if (v === null || v === undefined) return '—'
   if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`
   return `₹${v.toLocaleString('en-IN')}`
 }
 
-const formatDate = (d: string | null) => {
+const formatDate = (d: string | null | undefined) => {
   if (!d) return 'Present'
   return new Date(d).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
 }
@@ -268,16 +96,82 @@ const avatarHue = (c: Candidate) => {
   return Math.abs(hash) % 360
 }
 
-const selectCandidate = (c: Candidate) => {
-  selected.value = c
+async function selectCandidate(c: Candidate) {
   activeTab.value = 'overview'
+  try {
+    selected.value = await fetchCandidate(c.id)
+  } catch {
+    selected.value = c
+  }
 }
 
 const closePanel = () => {
   selected.value = null
 }
 
-const statuses = ['all', 'active', 'interviewing', 'offered', 'on_hold', 'hired', 'rejected']
+function openEdit() {
+  if (!selected.value) return
+  editDraft.value = candidateToDraft(selected.value)
+  showEditModal.value = true
+}
+
+function closeEdit() {
+  showEditModal.value = false
+  editDraft.value = null
+}
+
+async function saveEdit() {
+  if (!selected.value || !editDraft.value) return
+  saving.value = true
+  error.value = ''
+  try {
+    const updated = await updateCandidate(
+      selected.value.id,
+      draftToUpdatePayload(editDraft.value, selected.value.created_by),
+    )
+    const idx = candidates.value.findIndex((c) => c.id === updated.id)
+    if (idx !== -1) candidates.value[idx] = updated
+    selected.value = updated
+    closeEdit()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to update candidate'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function handleDownloadResume() {
+  if (!selected.value?.resume_url) return
+  downloadingResume.value = true
+  error.value = ''
+  try {
+    await downloadCandidateResume(selected.value)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to download resume'
+  } finally {
+    downloadingResume.value = false
+  }
+}
+
+async function handleDelete() {
+  if (!selected.value) return
+  const name = `${selected.value.first_name} ${selected.value.last_name}`
+  if (!confirm(`Delete candidate "${name}"? This cannot be undone.`)) return
+
+  deleting.value = true
+  error.value = ''
+  try {
+    await deleteCandidate(selected.value.id)
+    candidates.value = candidates.value.filter((c) => c.id !== selected.value!.id)
+    selected.value = null
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to delete candidate'
+  } finally {
+    deleting.value = false
+  }
+}
+
+const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered', 'on_hold', 'hired', 'rejected']
 </script>
 
 <template>
@@ -328,8 +222,11 @@ const statuses = ['all', 'active', 'interviewing', 'offered', 'on_hold', 'hired'
         </div>
       </div>
 
+      <div v-if="error" class="list-error" role="alert">{{ error }}</div>
+      <div v-if="loading" class="list-loading">Loading candidates…</div>
+
       <!-- Cards -->
-      <div class="card-list">
+      <div v-else class="card-list">
         <div
           v-for="c in filtered"
           :key="c.id"
@@ -441,12 +338,24 @@ const statuses = ['all', 'active', 'interviewing', 'offered', 'on_hold', 'hired'
 
           <!-- Quick actions -->
           <div class="panel-actions">
-            <a v-if="selected.resume_url" :href="selected.resume_url" class="action-btn action-btn--primary">
+            <button type="button" class="action-btn action-btn--primary" @click="openEdit">
+              Edit
+            </button>
+            <button type="button" class="action-btn action-btn--danger" :disabled="deleting" @click="handleDelete">
+              {{ deleting ? 'Deleting…' : 'Delete' }}
+            </button>
+            <button
+              v-if="selected.resume_url"
+              type="button"
+              class="action-btn"
+              :disabled="downloadingResume"
+              @click="handleDownloadResume"
+            >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1v8M4 6l3 3 3-3M2 11h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              Resume
-            </a>
+              {{ downloadingResume ? 'Downloading…' : 'Resume' }}
+            </button>
             <a v-if="selected.linkedin_url" :href="selected.linkedin_url" target="_blank" class="action-btn">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.3"/>
@@ -643,6 +552,25 @@ const statuses = ['all', 'active', 'interviewing', 'offered', 'on_hold', 'hired'
       </div>
     </Transition>
 
+    <!-- Edit modal -->
+    <div v-if="showEditModal && editDraft" class="modal-overlay" @click.self="closeEdit">
+      <div class="modal">
+        <header class="modal__header">
+          <h2>Edit Candidate</h2>
+          <button type="button" class="modal__close" @click="closeEdit">×</button>
+        </header>
+        <div class="modal__body">
+          <CandidateVerifyForm v-model="editDraft" />
+        </div>
+        <footer class="modal__footer">
+          <button type="button" class="action-btn" @click="closeEdit">Cancel</button>
+          <button type="button" class="action-btn action-btn--primary" :disabled="saving" @click="saveEdit">
+            {{ saving ? 'Saving…' : 'Save Changes' }}
+          </button>
+        </footer>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -714,6 +642,22 @@ const statuses = ['all', 'active', 'interviewing', 'offered', 'on_hold', 'hired'
   transition: background 0.15s;
 }
 .btn-add:hover { background: var(--hrms-primary-dark, #4f46e5); }
+
+.list-error {
+  margin: 0 24px 12px;
+  padding: 12px 16px;
+  font-size: 0.85rem;
+  color: #9b3d5c;
+  background: #fce8ef;
+  border-radius: 8px;
+}
+
+.list-loading {
+  padding: 40px 24px;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--hrms-text-muted, #94a3b8);
+}
 
 /* Search */
 .list-controls { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
@@ -1023,6 +967,75 @@ const statuses = ['all', 'active', 'interviewing', 'offered', 'on_hold', 'hired'
   border-color: var(--hrms-primary, #6366f1);
 }
 .action-btn--primary:hover { background: var(--hrms-primary-dark, #4f46e5); }
+.action-btn--danger {
+  color: #9b3d5c;
+  border-color: #e8b4c4;
+  background: #fce8ef;
+}
+.action-btn--danger:hover { background: #f9d5e3; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(45, 36, 48, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.modal {
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--hrms-surface, #fff);
+  border-radius: 14px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--hrms-border, #e2e8f0);
+}
+
+.modal__header h2 {
+  margin: 0;
+  font-family: var(--hrms-font-display);
+  font-size: 1.25rem;
+  color: var(--hrms-primary-dark);
+}
+
+.modal__close {
+  border: none;
+  background: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--hrms-text-muted);
+  cursor: pointer;
+}
+
+.modal__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+.modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--hrms-border, #e2e8f0);
+}
 
 /* Tabs */
 .panel-tabs {

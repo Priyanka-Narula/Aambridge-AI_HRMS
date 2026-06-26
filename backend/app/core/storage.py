@@ -51,6 +51,13 @@ class MinioStorage:
             response.release_conn()
 
 
+def object_key_from_storage_uri(storage_uri: str) -> str | None:
+    if not storage_uri.startswith("s3://"):
+        return None
+    _, _, object_key = storage_uri[5:].partition("/")
+    return object_key or None
+
+
 def _sanitize_filename(filename: str) -> str:
     name = filename.replace("\\", "/").split("/")[-1].strip()
     name = re.sub(r"[^\w.\-]", "_", name)

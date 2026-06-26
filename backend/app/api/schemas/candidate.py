@@ -1,15 +1,39 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
-from pydantic import BaseModel, EmailStr
 from typing import Optional
 import uuid
 
+from pydantic import BaseModel, EmailStr, Field
 
-class CandidateCreate(BaseModel):
+
+class SkillInput(BaseModel):
+    name: str
+    years_experience: Optional[Decimal] = None
+    proficiency_level: Optional[str] = None
+
+
+class EducationInput(BaseModel):
+    degree: str
+    specialization: Optional[str] = None
+    institution: Optional[str] = None
+    start_year: Optional[int] = None
+    end_year: Optional[int] = None
+    percentage: Optional[Decimal] = None
+
+
+class WorkExperienceInput(BaseModel):
+    company_name: str
+    designation: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    currently_working: bool = False
+    job_description: Optional[str] = None
+
+
+class CandidateBase(BaseModel):
     first_name: str
     last_name: str
     email: EmailStr
-
     nationality: Optional[str] = None
     date_of_birth: Optional[date] = None
     languages_known: Optional[str] = None
@@ -30,12 +54,57 @@ class CandidateCreate(BaseModel):
     created_by: Optional[str] = None
 
 
-class CandidateResponse(BaseModel):
-    id: uuid.UUID
-    first_name: str
-    last_name: str
-    email: EmailStr
-    candidate_status: str
+class CandidateCreate(CandidateBase):
+    skills: list[SkillInput] = Field(default_factory=list)
+    education_records: list[EducationInput] = Field(default_factory=list)
+    work_experiences: list[WorkExperienceInput] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+
+class CandidateUpdate(CandidateBase):
+    skills: list[SkillInput] = Field(default_factory=list)
+    education_records: list[EducationInput] = Field(default_factory=list)
+    work_experiences: list[WorkExperienceInput] = Field(default_factory=list)
+
+
+class SkillResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    years_experience: Optional[Decimal] = None
+    proficiency_level: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class EducationResponse(BaseModel):
+    id: uuid.UUID
+    degree: str
+    specialization: Optional[str] = None
+    institution: Optional[str] = None
+    start_year: Optional[int] = None
+    end_year: Optional[int] = None
+    percentage: Optional[Decimal] = None
+
+    model_config = {"from_attributes": True}
+
+
+class WorkExperienceResponse(BaseModel):
+    id: uuid.UUID
+    company_name: str
+    designation: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    currently_working: bool
+    job_description: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class CandidateResponse(CandidateBase):
+    id: uuid.UUID
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    skills: list[SkillResponse] = Field(default_factory=list)
+    education_records: list[EducationResponse] = Field(default_factory=list)
+    work_experiences: list[WorkExperienceResponse] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
