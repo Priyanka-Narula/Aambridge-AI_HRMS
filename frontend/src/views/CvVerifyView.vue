@@ -30,7 +30,7 @@ async function handleSave() {
   success.value = ''
 
   try {
-    const result = await approveCandidate(cvIngest.draft, auth.user.email)
+    const result = await approveCandidate(cvIngest.draft, auth.user!.email)
     success.value = `Candidate saved successfully (ID: ${result.candidate_id})`
     cvIngest.clear()
     setTimeout(() => router.push({ name: 'candidates' }), 1500)

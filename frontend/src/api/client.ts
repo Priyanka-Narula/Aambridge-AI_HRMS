@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { clearStoredToken, getStoredToken } from '@/api/token'
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '',
@@ -6,9 +7,20 @@ const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+apiClient.interceptors.request.use((config) => {
+  const token = getStoredToken()
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 401) {
+      clearStoredToken()
+    }
     const detail = error.response?.data?.detail
     if (typeof detail === 'string') {
       error.message = detail

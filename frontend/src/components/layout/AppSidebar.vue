@@ -18,13 +18,6 @@ const route = useRoute()
 const auth = useAuthStore()
 const { visibleNavItems } = useNavigation()
 
-const roleOptions: { value: UserRole; label: string }[] = [
-  { value: 'admin', label: 'Administrator' },
-  { value: 'recruiter', label: 'Recruiter' },
-  { value: 'manager', label: 'Hiring Manager' },
-  { value: 'client', label: 'Client' },
-]
-
 const currentYear = new Date().getFullYear()
 
 const isActive = (path: string) => {
@@ -34,18 +27,11 @@ const isActive = (path: string) => {
 
 const sidebarTagline = computed(() => {
   const taglines: Record<UserRole, string> = {
-    admin: 'Lead with clarity',
+    owner: 'Lead with clarity',
     recruiter: 'Find exceptional talent',
-    manager: 'Build your dream team',
-    client: 'Your hiring partner',
   }
-  return taglines[auth.role]
+  return auth.role ? taglines[auth.role] : ''
 })
-
-function onRoleChange(event: Event) {
-  const value = (event.target as HTMLSelectElement).value as UserRole
-  auth.setRole(value)
-}
 </script>
 
 <template>
@@ -60,7 +46,7 @@ function onRoleChange(event: Event) {
       </div>
     </div>
 
-    <p class="sidebar__tagline">{{ sidebarTagline }}</p>
+    <p v-if="sidebarTagline" class="sidebar__tagline">{{ sidebarTagline }}</p>
 
     <nav class="sidebar__nav">
       <RouterLink
@@ -77,17 +63,6 @@ function onRoleChange(event: Event) {
     </nav>
 
     <div class="sidebar__footer">
-      <label class="sidebar__role-label" for="role-switcher">Preview as</label>
-      <select
-        id="role-switcher"
-        class="sidebar__role-select"
-        :value="auth.role"
-        @change="onRoleChange"
-      >
-        <option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">
-          {{ opt.label }}
-        </option>
-      </select>
       <p class="sidebar__copyright">&copy; {{ currentYear }} Aambridge AI</p>
     </div>
   </aside>
@@ -206,10 +181,10 @@ function onRoleChange(event: Event) {
   font-size: 0.9rem;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.78);
+  text-decoration: none;
   transition:
     background var(--hrms-transition),
-    color var(--hrms-transition),
-    transform var(--hrms-transition);
+    color var(--hrms-transition);
 }
 
 .sidebar__link:hover {
@@ -228,35 +203,8 @@ function onRoleChange(event: Event) {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.sidebar__role-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.6;
-}
-
-.sidebar__role-select {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: var(--hrms-radius-sm);
-  font-family: inherit;
-  font-size: 0.85rem;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-}
-
-.sidebar__role-select:focus {
-  outline: 2px solid var(--hrms-accent);
-  outline-offset: 1px;
-}
-
 .sidebar__copyright {
-  margin: 12px 0 0;
+  margin: 0;
   font-size: 0.7rem;
   opacity: 0.45;
   text-align: center;

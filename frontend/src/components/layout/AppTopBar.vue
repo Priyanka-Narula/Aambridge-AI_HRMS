@@ -1,14 +1,26 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 defineEmits<{
   toggleSidebar: []
 }>()
 
+const router = useRouter()
 const auth = useAuthStore()
 const showUserMenu = ref(false)
 const showNotifications = ref(false)
+
+const displayName = computed(() => {
+  if (!auth.user) return ''
+  return `${auth.user.first_name} ${auth.user.last_name}`
+})
+
+const avatarInitials = computed(() => {
+  if (!auth.user) return ''
+  return `${auth.user.first_name[0]}${auth.user.last_name[0]}`.toUpperCase()
+})
 
 const notifications = [
   { id: 1, text: 'New candidate applied for Senior Developer', time: '5m ago' },
@@ -34,6 +46,12 @@ function toggleNotifications() {
 function closeMenus() {
   showUserMenu.value = false
   showNotifications.value = false
+}
+
+function handleLogout() {
+  closeMenus()
+  auth.logout()
+  router.push({ name: 'login' })
 }
 </script>
 
@@ -129,9 +147,9 @@ function closeMenus() {
           aria-label="User menu"
           @click="toggleUserMenu"
         >
-          <span class="topbar__avatar">{{ auth.user.avatarInitials }}</span>
+          <span class="topbar__avatar">{{ avatarInitials }}</span>
           <span class="topbar__user-info">
-            <span class="topbar__user-name">{{ auth.user.name }}</span>
+            <span class="topbar__user-name">{{ displayName }}</span>
             <span class="topbar__user-role">{{ auth.roleLabel }}</span>
           </span>
           <svg class="topbar__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -141,15 +159,15 @@ function closeMenus() {
 
         <div v-if="showUserMenu" class="topbar__dropdown topbar__dropdown--user">
           <div class="topbar__dropdown-user-header">
-            <span class="topbar__avatar topbar__avatar--lg">{{ auth.user.avatarInitials }}</span>
+            <span class="topbar__avatar topbar__avatar--lg">{{ avatarInitials }}</span>
             <div>
-              <strong>{{ auth.user.name }}</strong>
-              <span>{{ auth.user.email }}</span>
+              <strong>{{ displayName }}</strong>
+              <span>{{ auth.user?.email }}</span>
             </div>
           </div>
           <hr class="topbar__dropdown-divider" />
           <RouterLink to="/settings" class="topbar__dropdown-link" @click="closeMenus">Profile & Settings</RouterLink>
-          <button type="button" class="topbar__dropdown-link topbar__dropdown-link--muted">Sign out</button>
+          <button type="button" class="topbar__dropdown-link topbar__dropdown-link--muted" @click="handleLogout">Sign out</button>
         </div>
       </div>
     </div>

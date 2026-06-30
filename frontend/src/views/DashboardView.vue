@@ -23,7 +23,7 @@ const stats = [
   <div class="dashboard">
     <header class="dashboard__header">
       <div>
-        <h2 class="dashboard__greeting">{{ greeting }}, {{ auth.user.name.split(' ')[0] }}</h2>
+        <h2 class="dashboard__greeting">{{ greeting }}, {{ auth.user?.first_name }}</h2>
         <p class="dashboard__subtitle">
           Here's your hiring overview for
           <strong>{{ auth.dateRange.start }}</strong> to <strong>{{ auth.dateRange.end }}</strong>
