@@ -1,0 +1,84 @@
+/* Aambridge HRMS — women-led professional theme */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  --hrms-font-display: 'Cormorant Garamond', Georgia, serif;
+  --hrms-font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
+
+  --hrms-primary: #7a3b68;
+  --hrms-primary-dark: #4f2645;
+  --hrms-primary-light: #9e5a8a;
+  --hrms-primary-muted: #b87aa8;
+
+  --hrms-secondary: #f8f0f4;
+  --hrms-secondary-deep: #ede0e8;
+
+  --hrms-accent: #c4a35a;
+  --hrms-accent-soft: #f0e6d4;
+  --hrms-accent-hover: #b08f4a;
+
+  --hrms-surface: #fffbfa;
+  --hrms-surface-elevated: #ffffff;
+  --hrms-surface-muted: #f5f0f2;
+
+  --hrms-border: #e8dce3;
+  --hrms-border-strong: #d4c4ce;
+
+  --hrms-text: #2d2430;
+  --hrms-text-muted: #6b5f68;
+  --hrms-text-on-primary: #ffffff;
+  --hrms-text-on-sidebar: rgba(255, 255, 255, 0.92);
+
+  --hrms-sidebar-width: 260px;
+  --hrms-topbar-height: 64px;
+  --hrms-footer-height: 44px;
+
+  --hrms-shadow-sm: 0 1px 3px rgba(74, 38, 64, 0.06);
+  --hrms-shadow-md: 0 4px 16px rgba(74, 38, 64, 0.08);
+  --hrms-shadow-lg: 0 8px 32px rgba(74, 38, 64, 0.12);
+
+  --hrms-radius-sm: 6px;
+  --hrms-radius-md: 10px;
+  --hrms-radius-lg: 14px;
+
+  --hrms-transition: 0.2s ease;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--hrms-font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--hrms-text);
+  background: var(--hrms-surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+button {
+  font-family: inherit;
+}
+
+a {
+  color: var(--hrms-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--hrms-primary-light);
+}
