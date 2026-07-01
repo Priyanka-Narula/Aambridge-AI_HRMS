@@ -1,8 +1,11 @@
+import { designTokens } from '@/config/design-tokens'
 import 'vuetify/styles'
 import '@mdi/font/css/materialdesignicons.css'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
+
+const { colors } = designTokens
 
 export default createVuetify({
   components,
@@ -13,15 +16,15 @@ export default createVuetify({
       hrms: {
         dark: false,
         colors: {
-          primary: '#7a3b68',
-          secondary: '#f8f0f4',
-          accent: '#c4a35a',
-          error: '#9b3d5c',
-          info: '#6b5f68',
-          success: '#4a7c59',
-          warning: '#c4a35a',
-          background: '#fffbfa',
-          surface: '#ffffff',
+          primary: colors.primary,
+          secondary: colors.secondary,
+          accent: colors.accent,
+          error: colors.error,
+          info: colors.textMuted,
+          success: colors.success,
+          warning: colors.accent,
+          background: colors.surface,
+          surface: colors.surfaceElevated,
         },
       },
     },

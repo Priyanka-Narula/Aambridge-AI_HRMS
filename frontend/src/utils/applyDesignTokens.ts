@@ -1,0 +1,65 @@
+import { designTokens } from '@/config/design-tokens'
+
+export function applyDesignTokens(root: HTMLElement = document.documentElement): void {
+  const { fonts, colors, layout, radius, shadow, transition, typography } = designTokens
+
+  const vars: Record<string, string> = {
+    '--hrms-font-display': fonts.display,
+    '--hrms-font-body': fonts.body,
+    '--hrms-primary': colors.primary,
+    '--hrms-primary-dark': colors.primaryDark,
+    '--hrms-primary-light': colors.primaryLight,
+    '--hrms-primary-muted': colors.primaryMuted,
+    '--hrms-secondary': colors.secondary,
+    '--hrms-secondary-deep': colors.secondaryDeep,
+    '--hrms-accent': colors.accent,
+    '--hrms-accent-soft': colors.accentSoft,
+    '--hrms-accent-hover': colors.accentHover,
+    '--hrms-surface': colors.surface,
+    '--hrms-surface-elevated': colors.surfaceElevated,
+    '--hrms-surface-muted': colors.surfaceMuted,
+    '--hrms-border': colors.border,
+    '--hrms-border-strong': colors.borderStrong,
+    '--hrms-text': colors.text,
+    '--hrms-text-primary': colors.text,
+    '--hrms-text-secondary': colors.textSecondary,
+    '--hrms-text-muted': colors.textMuted,
+    '--hrms-text-on-primary': colors.textOnPrimary,
+    '--hrms-text-on-sidebar': colors.textOnSidebar,
+    '--hrms-error': colors.error,
+    '--hrms-error-bg': colors.errorBg,
+    '--hrms-error-border': colors.errorBorder,
+    '--hrms-success': colors.success,
+    '--hrms-success-bg': colors.successBg,
+    '--hrms-success-border': colors.successBorder,
+    '--hrms-warning': colors.warning,
+    '--hrms-warning-bg': colors.warningBg,
+    '--hrms-warning-border': colors.warningBorder,
+    '--hrms-overlay': colors.overlay,
+    '--hrms-bg': colors.surfaceMuted,
+    '--hrms-login-gradient': colors.loginGradient,
+    '--hrms-primary-gradient': colors.primaryGradient,
+    '--hrms-accent-gradient': colors.accentGradient,
+    '--hrms-sidebar-gradient': colors.sidebarGradient,
+    '--hrms-sidebar-width': layout.sidebarWidth,
+    '--hrms-topbar-height': layout.topbarHeight,
+    '--hrms-footer-height': layout.footerHeight,
+    '--hrms-page-max-width': layout.pageMaxWidth,
+    '--hrms-radius-sm': radius.sm,
+    '--hrms-radius-md': radius.md,
+    '--hrms-radius-lg': radius.lg,
+    '--hrms-radius-pill': radius.pill,
+    '--hrms-shadow-sm': shadow.sm,
+    '--hrms-shadow-md': shadow.md,
+    '--hrms-shadow-lg': shadow.lg,
+    '--hrms-shadow-modal': shadow.modal,
+    '--hrms-transition': transition,
+    '--hrms-page-title-size': typography.pageTitle,
+    '--hrms-page-title-size-lg': typography.pageTitleLg,
+    '--hrms-section-title-size': typography.sectionTitle,
+  }
+
+  for (const [key, value] of Object.entries(vars)) {
+    root.style.setProperty(key, value)
+  }
+}
