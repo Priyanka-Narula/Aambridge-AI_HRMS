@@ -3,6 +3,9 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { approveCandidate } from '@/api/candidates'
 import CandidateVerifyForm from '@/components/candidates/CandidateVerifyForm.vue'
+import HrmsAlert from '@/components/ui/HrmsAlert.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import PageLayout from '@/components/ui/PageLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useCvIngestStore } from '@/stores/cvIngest'
 
@@ -48,143 +51,63 @@ function handleDiscard() {
 </script>
 
 <template>
-  <div v-if="cvIngest.draft" class="cv-verify">
-    <header class="cv-verify__header">
-      <div>
-        <h2>Verify &amp; Save Candidate</h2>
-        <p>Review parsed fields, correct any errors, then save to the database.</p>
-      </div>
-      <div class="cv-verify__meta" v-if="uploadMeta">
-        <span class="cv-verify__badge">{{ uploadMeta.filename }}</span>
-        <span v-if="uploadMeta.parsing_method" class="cv-verify__badge cv-verify__badge--muted">
+  <PageLayout v-if="cvIngest.draft" variant="wide">
+    <PageHeader title="Verify & Save Candidate" subtitle="Review parsed fields, correct any errors, then save to the database.">
+      <div v-if="uploadMeta" class="hrms-meta-row" style="margin-top: 12px">
+        <span class="hrms-badge">{{ uploadMeta.filename }}</span>
+        <span v-if="uploadMeta.parsing_method" class="hrms-badge hrms-badge--muted">
           Parser: {{ uploadMeta.parsing_method }}
         </span>
-        <span class="cv-verify__badge cv-verify__badge--muted">
+        <span class="hrms-badge hrms-badge--muted">
           {{ uploadMeta.total_characters.toLocaleString() }} chars extracted
         </span>
       </div>
-    </header>
+    </PageHeader>
 
-    <div
-      v-if="uploadMeta?.validation_errors?.length"
-      class="cv-verify__warnings"
-      role="alert"
-    >
+    <HrmsAlert v-if="uploadMeta?.validation_errors?.length" type="warning">
       <strong>Validation warnings from parser:</strong>
-      <ul>
+      <ul style="margin: 8px 0 0; padding-left: 18px">
         <li v-for="(err, i) in uploadMeta.validation_errors" :key="i">{{ err }}</li>
       </ul>
-    </div>
+    </HrmsAlert>
 
-    <div class="cv-verify__layout">
-      <div class="cv-verify__form-col">
+    <div class="hrms-grid-2">
+      <div>
         <CandidateVerifyForm v-model="cvIngest.draft" />
       </div>
 
-      <aside class="cv-verify__sidebar">
-        <div class="cv-verify__preview-card">
-          <h3>Extracted text preview</h3>
-          <pre>{{ uploadMeta?.text_preview }}</pre>
+      <aside>
+        <div class="hrms-card hrms-card--flat" style="margin-bottom: 16px">
+          <div class="hrms-card__body">
+            <h3 class="hrms-card__title">Extracted text preview</h3>
+            <pre class="cv-verify__pre">{{ uploadMeta?.text_preview }}</pre>
+          </div>
         </div>
-        <div class="cv-verify__preview-card">
-          <h3>Storage</h3>
-          <p class="cv-verify__storage-uri">{{ uploadMeta?.storage_uri }}</p>
+        <div class="hrms-card hrms-card--flat">
+          <div class="hrms-card__body">
+            <h3 class="hrms-card__title">Storage</h3>
+            <p class="cv-verify__uri">{{ uploadMeta?.storage_uri }}</p>
+          </div>
         </div>
       </aside>
     </div>
 
-    <div v-if="error" class="cv-verify__error" role="alert">{{ error }}</div>
-    <div v-if="success" class="cv-verify__success" role="status">{{ success }}</div>
+    <HrmsAlert v-if="error" type="error">{{ error }}</HrmsAlert>
+    <HrmsAlert v-if="success" type="success">{{ success }}</HrmsAlert>
 
-    <div class="cv-verify__actions">
-      <button type="button" class="cv-verify__btn cv-verify__btn--primary" :disabled="saving" @click="handleSave">
-        {{ saving ? 'Saving…' : 'Save to Database' }}
+    <div class="hrms-actions">
+      <button type="button" class="hrms-btn hrms-btn--primary hrms-btn--lg" :disabled="saving" @click="handleSave">
+        {{ saving ? 'Saving...' : 'Save to Database' }}
       </button>
-      <button type="button" class="cv-verify__btn cv-verify__btn--ghost" :disabled="saving" @click="handleDiscard">
-        Discard &amp; Upload Another
+      <button type="button" class="hrms-btn hrms-btn--ghost hrms-btn--lg" :disabled="saving" @click="handleDiscard">
+        Discard & Upload Another
       </button>
     </div>
-  </div>
+  </PageLayout>
 </template>
 
 <style scoped>
-.cv-verify__header {
-  margin-bottom: 24px;
-}
-
-.cv-verify__header h2 {
-  margin: 0 0 6px;
-  font-family: var(--hrms-font-display);
-  font-size: 1.75rem;
-  color: var(--hrms-primary-dark);
-}
-
-.cv-verify__header p {
-  margin: 0 0 12px;
-  font-size: 0.9rem;
-  color: var(--hrms-text-muted);
-}
-
-.cv-verify__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.cv-verify__badge {
-  padding: 4px 12px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--hrms-primary);
-  background: var(--hrms-secondary);
-  border-radius: 999px;
-}
-
-.cv-verify__badge--muted {
-  color: var(--hrms-text-muted);
-  background: var(--hrms-surface-muted);
-}
-
-.cv-verify__warnings {
-  margin-bottom: 20px;
-  padding: 14px 16px;
-  font-size: 0.88rem;
-  color: #7a5c00;
-  background: #fff8e6;
-  border: 1px solid #e8d49a;
-  border-radius: var(--hrms-radius-md);
-}
-
-.cv-verify__warnings ul {
-  margin: 8px 0 0;
-  padding-left: 18px;
-}
-
-.cv-verify__layout {
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 24px;
-  align-items: start;
-}
-
-.cv-verify__preview-card {
-  margin-bottom: 16px;
-  padding: 16px;
-  background: var(--hrms-surface-elevated);
-  border: 1px solid var(--hrms-border);
-  border-radius: var(--hrms-radius-lg);
-}
-
-.cv-verify__preview-card h3 {
-  margin: 0 0 10px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--hrms-primary-dark);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.cv-verify__preview-card pre {
+.cv-verify__pre {
   margin: 0;
   font-size: 0.75rem;
   line-height: 1.5;
@@ -195,69 +118,10 @@ function handleDiscard() {
   overflow-y: auto;
 }
 
-.cv-verify__storage-uri {
+.cv-verify__uri {
   margin: 0;
   font-size: 0.78rem;
   color: var(--hrms-text-muted);
   word-break: break-all;
-}
-
-.cv-verify__error {
-  margin-top: 16px;
-  padding: 12px 16px;
-  font-size: 0.9rem;
-  color: #9b3d5c;
-  background: #fce8ef;
-  border-radius: var(--hrms-radius-md);
-}
-
-.cv-verify__success {
-  margin-top: 16px;
-  padding: 12px 16px;
-  font-size: 0.9rem;
-  color: #2d6a3e;
-  background: #e8f5ec;
-  border-radius: var(--hrms-radius-md);
-}
-
-.cv-verify__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid var(--hrms-border);
-}
-
-.cv-verify__btn {
-  padding: 12px 24px;
-  border-radius: var(--hrms-radius-md);
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity var(--hrms-transition);
-}
-
-.cv-verify__btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.cv-verify__btn--primary {
-  border: none;
-  color: #fff;
-  background: linear-gradient(135deg, var(--hrms-primary) 0%, var(--hrms-primary-dark) 100%);
-}
-
-.cv-verify__btn--ghost {
-  border: 1px solid var(--hrms-border-strong);
-  color: var(--hrms-text-muted);
-  background: transparent;
-}
-
-@media (max-width: 1024px) {
-  .cv-verify__layout {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

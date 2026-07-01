@@ -50,6 +50,14 @@ function closeSidebar() {
   flex: 1;
   padding: 24px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dashboard-layout__content:has(.hrms-split) {
+  padding: 0;
+  overflow: hidden;
 }
 
 @media (min-width: 1024px) {

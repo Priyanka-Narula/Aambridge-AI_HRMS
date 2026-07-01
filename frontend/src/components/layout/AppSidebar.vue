@@ -85,7 +85,7 @@ const sidebarTagline = computed(() => {
   flex-direction: column;
   width: var(--hrms-sidebar-width);
   height: 100vh;
-  background: linear-gradient(175deg, #5c2d50 0%, #3d1f36 55%, #2a1524 100%);
+  background: var(--hrms-sidebar-gradient);
   color: var(--hrms-text-on-sidebar);
   transform: translateX(-100%);
   transition: transform var(--hrms-transition);

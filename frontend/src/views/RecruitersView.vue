@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { createRecruiter, fetchUsers, updateUserStatus } from '@/api/users'
+import HrmsAlert from '@/components/ui/HrmsAlert.vue'
+import HrmsModal from '@/components/ui/HrmsModal.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import PageLayout from '@/components/ui/PageLayout.vue'
 import type { RecruiterCreatePayload, RecruiterListItem } from '@/types/auth'
+import { avatarHue, initials, orEmpty } from '@/utils/format'
 
 const users = ref<RecruiterListItem[]>([])
 const loading = ref(true)
@@ -21,15 +26,6 @@ const form = ref<RecruiterCreatePayload>({
   team: '',
   joining_date: '',
 })
-
-const headers = [
-  { title: 'Name', key: 'name' },
-  { title: 'Email', key: 'email' },
-  { title: 'Employee Code', key: 'employee_code' },
-  { title: 'Team', key: 'team' },
-  { title: 'Status', key: 'status' },
-  { title: 'Actions', key: 'actions', sortable: false },
-]
 
 async function loadUsers() {
   loading.value = true
@@ -84,6 +80,7 @@ async function submitRecruiter() {
 
 async function toggleStatus(user: RecruiterListItem) {
   const nextStatus = user.status === 'active' ? 'inactive' : 'active'
+  error.value = ''
   try {
     const updated = await updateUserStatus(user.id, nextStatus)
     users.value = users.value.map((u) => (u.id === updated.id ? updated : u))
@@ -95,109 +92,120 @@ async function toggleStatus(user: RecruiterListItem) {
 </script>
 
 <template>
-  <div class="recruiters-page">
-    <div class="d-flex align-center justify-space-between mb-6 flex-wrap ga-3">
-      <div>
-        <h1 class="text-h5 font-weight-bold">Recruiter Management</h1>
-        <p class="text-body-2 text-medium-emphasis">Create and manage recruiter accounts</p>
+  <PageLayout>
+    <PageHeader
+      title="Recruiter Management"
+      subtitle="Create and manage recruiter accounts"
+      :count="`${users.length} recruiters`"
+      size="default"
+    >
+      <template #actions>
+        <button type="button" class="hrms-btn hrms-btn--primary" @click="openDialog">
+          Add Recruiter
+        </button>
+      </template>
+    </PageHeader>
+
+    <HrmsAlert v-if="error" type="error" dismissible @dismiss="error = ''">
+      {{ error }}
+    </HrmsAlert>
+    <HrmsAlert v-if="success" type="success" dismissible @dismiss="success = ''">
+      {{ success }}
+    </HrmsAlert>
+
+    <div v-if="loading" class="hrms-loading">Loading recruiters...</div>
+
+    <div v-else class="hrms-list-stack">
+      <article
+        v-for="user in users"
+        :key="user.id"
+        class="hrms-card hrms-card--flat hrms-entity-card"
+      >
+        <div class="hrms-avatar" :style="`--hue: ${avatarHue(user.id)}`">
+          {{ initials(user.first_name, user.last_name) }}
+        </div>
+
+        <div class="hrms-entity-card__body">
+          <div class="hrms-entity-card__name-row">
+            <span class="hrms-entity-card__name">{{ user.first_name }} {{ user.last_name }}</span>
+            <span
+              class="hrms-status-badge"
+              :style="`--sc: ${user.status === 'active' ? 'var(--hrms-success)' : 'var(--hrms-text-muted)'}`"
+            >
+              {{ user.status }}
+            </span>
+          </div>
+          <div class="hrms-entity-card__role">{{ user.email }}</div>
+          <div class="hrms-entity-card__meta">
+            <span>{{ orEmpty(user.recruiter?.employee_code) }}</span>
+            <span v-if="user.recruiter?.team">{{ user.recruiter.team }}</span>
+            <span v-if="user.recruiter?.designation">{{ user.recruiter.designation }}</span>
+          </div>
+        </div>
+
+        <div class="hrms-entity-card__aside">
+          <button
+            type="button"
+            class="hrms-btn hrms-btn--sm"
+            :class="user.status === 'active' ? 'hrms-btn--danger' : 'hrms-btn--primary'"
+            @click="toggleStatus(user)"
+          >
+            {{ user.status === 'active' ? 'Deactivate' : 'Activate' }}
+          </button>
+        </div>
+      </article>
+
+      <div v-if="users.length === 0" class="hrms-empty">
+        <p>No recruiters yet. Add your first recruiter account.</p>
       </div>
-      <v-btn color="primary" prepend-icon="mdi-account-plus" @click="openDialog">
-        Add Recruiter
-      </v-btn>
     </div>
 
-    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable @click:close="error = ''">
-      {{ error }}
-    </v-alert>
-    <v-alert v-if="success" type="success" variant="tonal" class="mb-4" closable @click:close="success = ''">
-      {{ success }}
-    </v-alert>
+    <HrmsModal v-model="showDialog" title="Create Recruiter">
+      <div class="hrms-form-grid">
+        <label class="hrms-field">
+          <span class="hrms-label">First name</span>
+          <input v-model="form.first_name" class="hrms-input" type="text" required />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Last name</span>
+          <input v-model="form.last_name" class="hrms-input" type="text" required />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Email</span>
+          <input v-model="form.email" class="hrms-input" type="email" required />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Password</span>
+          <input v-model="form.password" class="hrms-input" type="password" required />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Employee code</span>
+          <input v-model="form.employee_code" class="hrms-input" type="text" required />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Phone</span>
+          <input v-model="form.phone" class="hrms-input" type="tel" />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Designation</span>
+          <input v-model="form.designation" class="hrms-input" type="text" />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Team</span>
+          <input v-model="form.team" class="hrms-input" type="text" />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Joining date</span>
+          <input v-model="form.joining_date" class="hrms-input" type="date" />
+        </label>
+      </div>
 
-    <v-card>
-      <v-data-table
-        :headers="headers"
-        :items="users"
-        :loading="loading"
-        item-value="id"
-        class="elevation-0"
-      >
-        <template #item.name="{ item }">
-          {{ item.first_name }} {{ item.last_name }}
-        </template>
-        <template #item.employee_code="{ item }">
-          {{ item.recruiter?.employee_code ?? '—' }}
-        </template>
-        <template #item.team="{ item }">
-          {{ item.recruiter?.team ?? '—' }}
-        </template>
-        <template #item.status="{ item }">
-          <v-chip
-            :color="item.status === 'active' ? 'success' : 'default'"
-            size="small"
-            variant="tonal"
-          >
-            {{ item.status }}
-          </v-chip>
-        </template>
-        <template #item.actions="{ item }">
-          <v-btn
-            size="small"
-            variant="text"
-            :color="item.status === 'active' ? 'error' : 'success'"
-            @click="toggleStatus(item)"
-          >
-            {{ item.status === 'active' ? 'Deactivate' : 'Activate' }}
-          </v-btn>
-        </template>
-      </v-data-table>
-    </v-card>
-
-    <v-dialog v-model="showDialog" max-width="640" persistent>
-      <v-card>
-        <v-card-title class="text-h6">Create Recruiter</v-card-title>
-        <v-card-text>
-          <v-row dense>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="form.first_name" label="First name" variant="outlined" required />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="form.last_name" label="Last name" variant="outlined" required />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="form.email" label="Email" type="email" variant="outlined" required />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="form.password" label="Password" type="password" variant="outlined" required />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="form.employee_code" label="Employee code" variant="outlined" required />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="form.phone" label="Phone" variant="outlined" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="form.designation" label="Designation" variant="outlined" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="form.team" label="Team" variant="outlined" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="form.joining_date" label="Joining date" type="date" variant="outlined" />
-            </v-col>
-          </v-row>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="showDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="saving" @click="submitRecruiter">Create</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </div>
+      <template #footer>
+        <button type="button" class="hrms-btn" @click="showDialog = false">Cancel</button>
+        <button type="button" class="hrms-btn hrms-btn--primary" :disabled="saving" @click="submitRecruiter">
+          {{ saving ? 'Creating...' : 'Create' }}
+        </button>
+      </template>
+    </HrmsModal>
+  </PageLayout>
 </template>
-
-<style scoped>
-.recruiters-page {
-  max-width: 1200px;
-}
-</style>
