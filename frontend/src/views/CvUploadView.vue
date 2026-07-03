@@ -3,6 +3,9 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { uploadCv } from '@/api/candidates'
 import CvDropzone from '@/components/candidates/CvDropzone.vue'
+import HrmsAlert from '@/components/ui/HrmsAlert.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import PageLayout from '@/components/ui/PageLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useCvIngestStore } from '@/stores/cvIngest'
 
@@ -29,7 +32,7 @@ async function handleUpload() {
   error.value = ''
 
   try {
-    const result = await uploadCv(selectedFile.value, auth.user.email)
+    const result = await uploadCv(selectedFile.value, auth.user!.email)
     cvIngest.setFromUpload(result)
     await router.push({ name: 'cv-verify' })
   } catch (err) {
@@ -41,134 +44,36 @@ async function handleUpload() {
 </script>
 
 <template>
-  <div class="cv-upload">
-    <header class="cv-upload__header">
-      <div>
-        <h2>Upload CV</h2>
-        <p>PDF is stored in MinIO, text extracted with PyMuPDF, and fields parsed using Mistral AI.</p>
-      </div>
-      <RouterLink to="/candidates" class="cv-upload__back">← Back to candidates</RouterLink>
-    </header>
+  <PageLayout variant="wide">
+    <PageHeader title="Upload CV" subtitle="PDF is stored in MinIO, text extracted with PyMuPDF, and fields parsed using Mistral AI.">
+      <template #actions>
+        <RouterLink to="/candidates" class="hrms-link-back">Back to candidates</RouterLink>
+      </template>
+    </PageHeader>
 
     <CvDropzone @select="onFileSelect" />
 
-    <div v-if="error" class="cv-upload__error" role="alert">{{ error }}</div>
+    <HrmsAlert v-if="error" type="error">{{ error }}</HrmsAlert>
 
-    <div class="cv-upload__actions">
+    <div style="margin-top: 20px">
       <button
         type="button"
-        class="cv-upload__btn"
+        class="hrms-btn hrms-btn--primary hrms-btn--lg"
         :disabled="!selectedFile || uploading"
         @click="handleUpload"
       >
-        {{ uploading ? 'Processing CV…' : 'Upload & Parse' }}
+        {{ uploading ? 'Processing CV...' : 'Upload & Parse' }}
       </button>
-      <p v-if="uploading" class="cv-upload__note">
+      <p v-if="uploading" class="hrms-page-subtitle" style="margin-top: 8px; font-style: italic">
         This may take up to 2 minutes while the AI extracts fields.
       </p>
     </div>
 
-    <ol class="cv-upload__steps">
-      <li><strong>Upload</strong> — PDF saved to MinIO object storage</li>
-      <li><strong>Extract</strong> — Text pulled from every page via PyMuPDF</li>
-      <li><strong>Parse</strong> — Mistral AI maps fields to the candidate schema</li>
-      <li><strong>Verify</strong> — Review and edit before saving to the database</li>
+    <ol class="hrms-steps">
+      <li><strong>Upload</strong> - PDF saved to MinIO object storage</li>
+      <li><strong>Extract</strong> - Text pulled from every page via PyMuPDF</li>
+      <li><strong>Parse</strong> - Mistral AI maps fields to the candidate schema</li>
+      <li><strong>Verify</strong> - Review and edit before saving to the database</li>
     </ol>
-  </div>
+  </PageLayout>
 </template>
-
-<style scoped>
-.cv-upload__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.cv-upload__header h2 {
-  margin: 0 0 6px;
-  font-family: var(--hrms-font-display);
-  font-size: 1.75rem;
-  color: var(--hrms-primary-dark);
-}
-
-.cv-upload__header p {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--hrms-text-muted);
-  max-width: 520px;
-}
-
-.cv-upload__back {
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--hrms-primary);
-}
-
-.cv-upload__error {
-  margin-top: 16px;
-  padding: 12px 16px;
-  font-size: 0.9rem;
-  color: #9b3d5c;
-  background: #fce8ef;
-  border: 1px solid #e8b4c4;
-  border-radius: var(--hrms-radius-md);
-}
-
-.cv-upload__actions {
-  margin-top: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.cv-upload__btn {
-  padding: 12px 28px;
-  border: none;
-  border-radius: var(--hrms-radius-md);
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, var(--hrms-primary) 0%, var(--hrms-primary-dark) 100%);
-  cursor: pointer;
-  transition: opacity var(--hrms-transition);
-}
-
-.cv-upload__btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.cv-upload__note {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--hrms-text-muted);
-  font-style: italic;
-}
-
-.cv-upload__steps {
-  margin: 32px 0 0;
-  padding: 20px 20px 20px 36px;
-  background: var(--hrms-secondary);
-  border-radius: var(--hrms-radius-lg);
-  border-left: 4px solid var(--hrms-accent);
-}
-
-.cv-upload__steps li {
-  margin-bottom: 8px;
-  font-size: 0.88rem;
-  color: var(--hrms-text-muted);
-  line-height: 1.5;
-}
-
-.cv-upload__steps li:last-child {
-  margin-bottom: 0;
-}
-
-.cv-upload__steps strong {
-  color: var(--hrms-primary-dark);
-}
-</style>

@@ -29,268 +29,140 @@ function removeExperience(index: number) {
 </script>
 
 <template>
-  <form class="verify-form" @submit.prevent>
-    <section class="verify-form__section">
-      <h3>Personal Information</h3>
-      <div class="verify-form__grid">
-        <label class="verify-form__field">
-          <span>First name *</span>
-          <input v-model="draft.first_name" type="text" required />
+  <form @submit.prevent>
+    <section class="hrms-form-section">
+      <h3 class="hrms-form-section__title">Personal Information</h3>
+      <div class="hrms-form-grid">
+        <label class="hrms-field">
+          <span class="hrms-label">First name *</span>
+          <input v-model="draft.first_name" class="hrms-input" type="text" required />
         </label>
-        <label class="verify-form__field">
-          <span>Last name *</span>
-          <input v-model="draft.last_name" type="text" required />
+        <label class="hrms-field">
+          <span class="hrms-label">Last name *</span>
+          <input v-model="draft.last_name" class="hrms-input" type="text" required />
         </label>
-        <label class="verify-form__field">
-          <span>Email *</span>
-          <input v-model="draft.email" type="email" required />
+        <label class="hrms-field">
+          <span class="hrms-label">Email *</span>
+          <input v-model="draft.email" class="hrms-input" type="email" required />
         </label>
-        <label class="verify-form__field">
-          <span>Phone</span>
-          <input v-model="draft.phone" type="tel" />
+        <label class="hrms-field">
+          <span class="hrms-label">Phone</span>
+          <input v-model="draft.phone" class="hrms-input" type="tel" />
         </label>
-        <label class="verify-form__field">
-          <span>Nationality</span>
-          <input v-model="draft.nationality" type="text" />
+        <label class="hrms-field">
+          <span class="hrms-label">Nationality</span>
+          <input v-model="draft.nationality" class="hrms-input" type="text" />
         </label>
-        <label class="verify-form__field">
-          <span>Date of birth</span>
-          <input v-model="draft.date_of_birth" type="date" />
+        <label class="hrms-field">
+          <span class="hrms-label">Date of birth</span>
+          <input v-model="draft.date_of_birth" class="hrms-input" type="date" />
         </label>
-        <label class="verify-form__field">
-          <span>Languages</span>
-          <input v-model="draft.languages_known" type="text" placeholder="English, Arabic" />
+        <label class="hrms-field">
+          <span class="hrms-label">Languages</span>
+          <input v-model="draft.languages_known" class="hrms-input" type="text" placeholder="English, Arabic" />
         </label>
-        <label class="verify-form__field">
-          <span>Visa status</span>
-          <input v-model="draft.visa_status" type="text" />
+        <label class="hrms-field">
+          <span class="hrms-label">Visa status</span>
+          <input v-model="draft.visa_status" class="hrms-input" type="text" />
         </label>
-        <label class="verify-form__field verify-form__field--wide">
-          <span>LinkedIn URL</span>
-          <input v-model="draft.linkedin_url" type="url" />
-        </label>
-      </div>
-    </section>
-
-    <section class="verify-form__section">
-      <h3>Professional Details</h3>
-      <div class="verify-form__grid">
-        <label class="verify-form__field">
-          <span>Current location</span>
-          <input v-model="draft.current_location" type="text" />
-        </label>
-        <label class="verify-form__field">
-          <span>Preferred location</span>
-          <input v-model="draft.preferred_location" type="text" />
-        </label>
-        <label class="verify-form__field">
-          <span>Total experience (years)</span>
-          <input v-model.number="draft.total_experience_years" type="number" step="0.1" min="0" />
-        </label>
-        <label class="verify-form__field">
-          <span>Current company</span>
-          <input v-model="draft.current_company" type="text" />
-        </label>
-        <label class="verify-form__field">
-          <span>Current designation</span>
-          <input v-model="draft.current_designation" type="text" />
-        </label>
-        <label class="verify-form__field">
-          <span>Notice period</span>
-          <input v-model="draft.notice_period" type="text" placeholder="30 days" />
-        </label>
-        <label class="verify-form__field">
-          <span>Current CTC</span>
-          <input v-model.number="draft.current_ctc" type="number" min="0" />
-        </label>
-        <label class="verify-form__field">
-          <span>Expected CTC</span>
-          <input v-model.number="draft.expected_ctc" type="number" min="0" />
+        <label class="hrms-field hrms-field--wide">
+          <span class="hrms-label">LinkedIn URL</span>
+          <input v-model="draft.linkedin_url" class="hrms-input" type="url" />
         </label>
       </div>
     </section>
 
-    <section class="verify-form__section">
-      <div class="verify-form__section-head">
-        <h3>Skills</h3>
-        <button type="button" class="verify-form__add-btn" @click="addSkill">+ Add skill</button>
-      </div>
-      <div v-if="draft.skills.length === 0" class="verify-form__empty">No skills parsed</div>
-      <div v-for="(skill, i) in draft.skills" :key="i" class="verify-form__row-card">
-        <input v-model="skill.name" type="text" placeholder="Skill name" />
-        <input v-model.number="skill.years_experience" type="number" step="0.1" placeholder="Years" />
-        <input v-model="skill.proficiency_level" type="text" placeholder="Level" />
-        <button type="button" class="verify-form__remove-btn" @click="removeSkill(i)">Remove</button>
+    <section class="hrms-form-section">
+      <h3 class="hrms-form-section__title">Professional Details</h3>
+      <div class="hrms-form-grid">
+        <label class="hrms-field">
+          <span class="hrms-label">Current location</span>
+          <input v-model="draft.current_location" class="hrms-input" type="text" />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Preferred location</span>
+          <input v-model="draft.preferred_location" class="hrms-input" type="text" />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Total experience (years)</span>
+          <input v-model.number="draft.total_experience_years" class="hrms-input" type="number" step="0.1" min="0" />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Current company</span>
+          <input v-model="draft.current_company" class="hrms-input" type="text" />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Current designation</span>
+          <input v-model="draft.current_designation" class="hrms-input" type="text" />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Notice period</span>
+          <input v-model="draft.notice_period" class="hrms-input" type="text" placeholder="30 days" />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Current CTC</span>
+          <input v-model.number="draft.current_ctc" class="hrms-input" type="number" min="0" />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Expected CTC</span>
+          <input v-model.number="draft.expected_ctc" class="hrms-input" type="number" min="0" />
+        </label>
       </div>
     </section>
 
-    <section class="verify-form__section">
-      <div class="verify-form__section-head">
-        <h3>Education</h3>
-        <button type="button" class="verify-form__add-btn" @click="addEducation">+ Add education</button>
+    <section class="hrms-form-section">
+      <div class="hrms-form-section__head">
+        <h3 class="hrms-form-section__title">Skills</h3>
+        <button type="button" class="hrms-btn hrms-btn--sm hrms-btn--ghost" @click="addSkill">+ Add skill</button>
       </div>
-      <div v-if="draft.education.length === 0" class="verify-form__empty">No education parsed</div>
-      <div v-for="(edu, i) in draft.education" :key="i" class="verify-form__row-card verify-form__row-card--stack">
-        <input v-model="edu.degree" type="text" placeholder="Degree *" />
-        <input v-model="edu.specialization" type="text" placeholder="Specialization" />
-        <input v-model="edu.institution" type="text" placeholder="Institution" />
-        <div class="verify-form__inline">
-          <input v-model.number="edu.start_year" type="number" placeholder="Start year" />
-          <input v-model.number="edu.end_year" type="number" placeholder="End year" />
-          <input v-model.number="edu.percentage" type="number" step="0.01" placeholder="%" />
+      <div v-if="draft.skills.length === 0" class="hrms-empty-inline">No skills parsed</div>
+      <div v-for="(skill, i) in draft.skills" :key="i" class="hrms-form-row">
+        <input v-model="skill.name" class="hrms-input" type="text" placeholder="Skill name" />
+        <input v-model.number="skill.years_experience" class="hrms-input" type="number" step="0.1" placeholder="Years" />
+        <input v-model="skill.proficiency_level" class="hrms-input" type="text" placeholder="Level" />
+        <button type="button" class="hrms-btn hrms-btn--sm hrms-btn--danger" @click="removeSkill(i)">Remove</button>
+      </div>
+    </section>
+
+    <section class="hrms-form-section">
+      <div class="hrms-form-section__head">
+        <h3 class="hrms-form-section__title">Education</h3>
+        <button type="button" class="hrms-btn hrms-btn--sm hrms-btn--ghost" @click="addEducation">+ Add education</button>
+      </div>
+      <div v-if="draft.education.length === 0" class="hrms-empty-inline">No education parsed</div>
+      <div v-for="(edu, i) in draft.education" :key="i" class="hrms-form-row hrms-form-row--stack">
+        <input v-model="edu.degree" class="hrms-input" type="text" placeholder="Degree *" />
+        <input v-model="edu.specialization" class="hrms-input" type="text" placeholder="Specialization" />
+        <input v-model="edu.institution" class="hrms-input" type="text" placeholder="Institution" />
+        <div class="hrms-form-inline">
+          <input v-model.number="edu.start_year" class="hrms-input" type="number" placeholder="Start year" />
+          <input v-model.number="edu.end_year" class="hrms-input" type="number" placeholder="End year" />
+          <input v-model.number="edu.percentage" class="hrms-input" type="number" step="0.01" placeholder="%" />
         </div>
-        <button type="button" class="verify-form__remove-btn" @click="removeEducation(i)">Remove</button>
+        <button type="button" class="hrms-btn hrms-btn--sm hrms-btn--danger" @click="removeEducation(i)">Remove</button>
       </div>
     </section>
 
-    <section class="verify-form__section">
-      <div class="verify-form__section-head">
-        <h3>Work Experience</h3>
-        <button type="button" class="verify-form__add-btn" @click="addExperience">+ Add experience</button>
+    <section class="hrms-form-section">
+      <div class="hrms-form-section__head">
+        <h3 class="hrms-form-section__title">Work Experience</h3>
+        <button type="button" class="hrms-btn hrms-btn--sm hrms-btn--ghost" @click="addExperience">+ Add experience</button>
       </div>
-      <div v-if="draft.work_experience.length === 0" class="verify-form__empty">No experience parsed</div>
-      <div v-for="(exp, i) in draft.work_experience" :key="i" class="verify-form__row-card verify-form__row-card--stack">
-        <input v-model="exp.company_name" type="text" placeholder="Company *" />
-        <input v-model="exp.designation" type="text" placeholder="Designation" />
-        <div class="verify-form__inline">
-          <input v-model="exp.start_date" type="date" />
-          <input v-model="exp.end_date" type="date" :disabled="exp.currently_working" />
-          <label class="verify-form__check">
+      <div v-if="draft.work_experience.length === 0" class="hrms-empty-inline">No experience parsed</div>
+      <div v-for="(exp, i) in draft.work_experience" :key="i" class="hrms-form-row hrms-form-row--stack">
+        <input v-model="exp.company_name" class="hrms-input" type="text" placeholder="Company *" />
+        <input v-model="exp.designation" class="hrms-input" type="text" placeholder="Designation" />
+        <div class="hrms-form-inline">
+          <input v-model="exp.start_date" class="hrms-input" type="date" />
+          <input v-model="exp.end_date" class="hrms-input" type="date" :disabled="exp.currently_working" />
+          <label class="hrms-check">
             <input v-model="exp.currently_working" type="checkbox" />
             Current
           </label>
         </div>
-        <textarea v-model="exp.job_description" rows="2" placeholder="Job description" />
-        <button type="button" class="verify-form__remove-btn" @click="removeExperience(i)">Remove</button>
+        <textarea v-model="exp.job_description" class="hrms-textarea" rows="2" placeholder="Job description" />
+        <button type="button" class="hrms-btn hrms-btn--sm hrms-btn--danger" @click="removeExperience(i)">Remove</button>
       </div>
     </section>
   </form>
 </template>
-
-<style scoped>
-.verify-form__section {
-  margin-bottom: 28px;
-  padding: 20px;
-  background: var(--hrms-surface-elevated);
-  border: 1px solid var(--hrms-border);
-  border-radius: var(--hrms-radius-lg);
-}
-
-.verify-form__section h3 {
-  margin: 0 0 16px;
-  font-family: var(--hrms-font-display);
-  font-size: 1.1rem;
-  color: var(--hrms-primary-dark);
-}
-
-.verify-form__section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.verify-form__section-head h3 {
-  margin: 0;
-}
-
-.verify-form__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
-}
-
-.verify-form__field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.verify-form__field--wide {
-  grid-column: 1 / -1;
-}
-
-.verify-form__field span {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--hrms-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.verify-form__field input,
-.verify-form__row-card input,
-.verify-form__row-card textarea {
-  padding: 9px 12px;
-  border: 1px solid var(--hrms-border);
-  border-radius: var(--hrms-radius-sm);
-  font-family: inherit;
-  font-size: 0.9rem;
-  color: var(--hrms-text);
-  background: var(--hrms-surface);
-}
-
-.verify-form__field input:focus,
-.verify-form__row-card input:focus,
-.verify-form__row-card textarea:focus {
-  outline: 2px solid var(--hrms-primary-muted);
-  outline-offset: 1px;
-}
-
-.verify-form__row-card {
-  display: grid;
-  grid-template-columns: 1fr 100px 120px auto;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
-  padding: 12px;
-  background: var(--hrms-surface-muted);
-  border-radius: var(--hrms-radius-sm);
-}
-
-.verify-form__row-card--stack {
-  grid-template-columns: 1fr;
-}
-
-.verify-form__inline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.verify-form__check {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.85rem;
-  color: var(--hrms-text-muted);
-}
-
-.verify-form__add-btn {
-  padding: 6px 12px;
-  border: 1px solid var(--hrms-primary-muted);
-  border-radius: var(--hrms-radius-sm);
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--hrms-primary);
-  background: transparent;
-  cursor: pointer;
-}
-
-.verify-form__remove-btn {
-  padding: 6px 10px;
-  border: none;
-  border-radius: var(--hrms-radius-sm);
-  font-size: 0.78rem;
-  color: #9b3d5c;
-  background: #fce8ef;
-  cursor: pointer;
-}
-
-.verify-form__empty {
-  font-size: 0.85rem;
-  color: var(--hrms-text-muted);
-  font-style: italic;
-}
-</style>

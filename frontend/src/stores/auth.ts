@@ -1,37 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import type { DateRange, User, UserRole } from '@/types/auth'
-
-const DEMO_USERS: Record<UserRole, User> = {
-  admin: {
-    id: '1',
-    name: 'Amara Chen',
-    email: 'amara@aambridge.ai',
-    role: 'admin',
-    avatarInitials: 'AC',
-  },
-  recruiter: {
-    id: '2',
-    name: 'Priya Narula',
-    email: 'priya@aambridge.ai',
-    role: 'recruiter',
-    avatarInitials: 'PN',
-  },
-  manager: {
-    id: '3',
-    name: 'Sofia Martinez',
-    email: 'sofia@aambridge.ai',
-    role: 'manager',
-    avatarInitials: 'SM',
-  },
-  client: {
-    id: '4',
-    name: 'Elena Brooks',
-    email: 'elena@clientcorp.com',
-    role: 'client',
-    avatarInitials: 'EB',
-  },
-}
+import * as authApi from '@/api/auth'
+import { getStoredToken } from '@/api/token'
+import type { AuthUser, DateRange, UserRole } from '@/types/auth'
 
 function defaultDateRange(): DateRange {
   const end = new Date()
@@ -44,23 +15,51 @@ function defaultDateRange(): DateRange {
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<User>({ ...DEMO_USERS.admin })
+  const user = ref<AuthUser | null>(null)
+  const initialized = ref(false)
+  const loading = ref(false)
+  const error = ref('')
   const dateRange = ref<DateRange>(defaultDateRange())
-  const notificationCount = ref(3)
+  const notificationCount = ref(0)
 
-  const role = computed(() => user.value.role)
+  const isAuthenticated = computed(() => !!user.value && !!getStoredToken())
+  const role = computed<UserRole | null>(() => user.value?.role ?? null)
   const roleLabel = computed(() => {
-    const labels: Record<UserRole, string> = {
-      admin: 'Administrator',
-      recruiter: 'Recruiter',
-      manager: 'Hiring Manager',
-      client: 'Client',
-    }
-    return labels[user.value.role]
+    if (role.value === 'owner') return 'Owner'
+    if (role.value === 'recruiter') return 'Recruiter'
+    return ''
   })
 
-  function setRole(role: UserRole) {
-    user.value = { ...DEMO_USERS[role] }
+  async function initialize() {
+    if (initialized.value) return
+    initialized.value = true
+    if (!getStoredToken()) return
+    try {
+      user.value = await authApi.fetchMe()
+    } catch {
+      authApi.clearStoredToken()
+      user.value = null
+    }
+  }
+
+  async function login(email: string, password: string) {
+    loading.value = true
+    error.value = ''
+    try {
+      await authApi.login({ email, password })
+      user.value = await authApi.fetchMe()
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Login failed'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function logout() {
+    authApi.logout()
+    user.value = null
+    initialized.value = true
   }
 
   function setDateRange(range: DateRange) {
@@ -69,11 +68,17 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     user,
+    initialized,
+    loading,
+    error,
+    isAuthenticated,
     role,
     roleLabel,
     dateRange,
     notificationCount,
-    setRole,
+    initialize,
+    login,
+    logout,
     setDateRange,
   }
 })

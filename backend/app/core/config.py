@@ -22,5 +22,19 @@ class Settings(BaseSettings):
     HF_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
     HF_MAX_TOKENS: int = 2048
 
+    JWT_SECRET_KEY: str
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
+
+    BOOTSTRAP_OWNER_EMAIL: str = "owner@aambridge.ai"
+    BOOTSTRAP_OWNER_PASSWORD: str | None = None
+    BOOTSTRAP_OWNER_FIRST_NAME: str = "Platform"
+    BOOTSTRAP_OWNER_LAST_NAME: str = "Owner"
+
+    OFFICE_TIMEZONE: str = "Asia/Dubai"
+    CHECKIN_EXPECTED: str = "09:30"
+    CHECKOUT_EXPECTED: str = "18:30"
+    LATE_THRESHOLD: str = "10:00"
+
 
 settings = Settings()

@@ -7,10 +7,12 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.routes import candidates, cv
+from app.api.routes import attendance, auth, candidates, cv, users
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
+from app.core.deps import get_current_user
 from app.core.storage import get_storage, init_storage
+from app.services.auth_service import ensure_bootstrap_owner
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,11 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_storage()
+    db = SessionLocal()
+    try:
+        ensure_bootstrap_owner(db)
+    finally:
+        db.close()
     yield
 
 app = FastAPI(
@@ -321,5 +328,8 @@ def test_upload_page() -> str:
 </html>"""
 
 
-app.include_router(cv.router)
-app.include_router(candidates.router)
+app.include_router(auth.router)
+app.include_router(users.router)
+app.include_router(attendance.router, dependencies=[Depends(get_current_user)])
+app.include_router(cv.router, dependencies=[Depends(get_current_user)])
+app.include_router(candidates.router, dependencies=[Depends(get_current_user)])

@@ -46,8 +46,8 @@ function openPicker() {
 
 <template>
   <div
-    class="dropzone"
-    :class="{ 'dropzone--active': isDragging }"
+    class="hrms-dropzone"
+    :class="{ 'hrms-dropzone--active': isDragging }"
     role="button"
     tabindex="0"
     @dragover="onDragOver"
@@ -60,72 +60,36 @@ function openPicker() {
       ref="fileInput"
       type="file"
       accept=".pdf,application/pdf"
-      class="dropzone__input"
+      class="sr-only"
       @change="onInputChange"
     />
-    <div class="dropzone__icon" aria-hidden="true">
+    <div class="hrms-dropzone__icon" aria-hidden="true">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
         <path d="M14 2v6h6M12 18v-6M9 15l3-3 3 3" />
       </svg>
     </div>
-    <p class="dropzone__title">Drop CV here or click to browse</p>
-    <p class="dropzone__hint">PDF only · Stored in MinIO · Parsed with Mistral AI</p>
-    <p v-if="selectedName" class="dropzone__file">{{ selectedName }}</p>
+    <p class="hrms-dropzone__title">Drop CV here or click to browse</p>
+    <p class="hrms-dropzone__hint">PDF only · Stored in MinIO · Parsed with Mistral AI</p>
+    <p v-if="selectedName" class="hrms-badge" style="margin-top: 8px">{{ selectedName }}</p>
   </div>
 </template>
 
 <style scoped>
-.dropzone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 48px 24px;
-  border: 2px dashed var(--hrms-border-strong);
-  border-radius: var(--hrms-radius-lg);
-  background: linear-gradient(135deg, var(--hrms-secondary) 0%, var(--hrms-surface-elevated) 100%);
-  cursor: pointer;
-  transition:
-    border-color var(--hrms-transition),
-    background var(--hrms-transition);
-}
-
-.dropzone:hover,
-.dropzone--active {
-  border-color: var(--hrms-primary-muted);
-  background: var(--hrms-secondary);
-}
-
-.dropzone__input {
-  display: none;
-}
-
-.dropzone__icon {
+.hrms-dropzone__icon {
   color: var(--hrms-primary);
   opacity: 0.8;
 }
 
-.dropzone__title {
-  margin: 0;
-  font-weight: 600;
-  color: var(--hrms-primary-dark);
-}
-
-.dropzone__hint {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--hrms-text-muted);
-}
-
-.dropzone__file {
-  margin: 8px 0 0;
-  padding: 6px 14px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--hrms-primary);
-  background: var(--hrms-surface-elevated);
-  border-radius: 999px;
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>

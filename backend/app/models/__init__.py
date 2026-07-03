@@ -1,3 +1,4 @@
+from app.models.attendance import AttendanceRecord
 from app.models.base import Base
 from app.models.candidate import (
     Candidate,
@@ -37,6 +38,7 @@ from app.models.user_access import (
 
 __all__ = [
     "Base",
+    "AttendanceRecord",
     "Role",
     "User",
     "Recruiter",
