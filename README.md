@@ -149,15 +149,24 @@ npm run preview  # preview production build
 ```
 Aambridge-AI_HRMS/
 ├── backend/
-│   ├── alembic/          # Migrations: 001 schema · 002 seed · 003 attendance
+│   ├── alembic/
+│   │   └── versions/     # 001 schema · 002 seed · 003 attendance · 004 clients portal_url
 │   ├── app/
-│   │   ├── api/routes/   # auth, users, candidates, cv, attendance
+│   │   ├── api/
+│   │   │   ├── routes/   # auth, users, clients, candidates, cv, attendance
+│   │   │   └── schemas/  # user, client, candidate, attendance, cv
 │   │   ├── core/         # Config, database, auth deps
-│   │   ├── models/       # SQLAlchemy models (incl. attendance.py)
+│   │   ├── models/       # SQLAlchemy models (user_access, candidate, pipeline, …)
+│   │   ├── services/     # user, client, candidate, cv, auth services
 │   │   └── main.py       # FastAPI entry point
 │   ├── .env.example
 │   └── requirements.txt
-├── frontend/             # Vue 3 + Vite + TypeScript
+├── frontend/
+│   └── src/
+│       ├── api/          # auth, users, clients, candidates, attendance
+│       ├── types/        # auth, clients, navigation
+│       ├── views/        # RecruitersView, ClientsView, CandidatesView, …
+│       └── config/       # navigation (role-filtered sidebar items)
 ├── docker-compose.yml    # PostgreSQL + MinIO
 └── README.md
 ```
@@ -183,6 +192,58 @@ Set these in `backend/.env` — never commit `.env`.
 | `CHECKIN_EXPECTED` | `09:30` | Expected check-in time shown on dashboard |
 | `CHECKOUT_EXPECTED` | `18:30` | Expected check-out time shown on dashboard |
 | `LATE_THRESHOLD` | `10:00` | Check-ins after this time are marked Late |
+
+---
+
+## Clients module
+
+Manage client companies, their contacts, and per-client candidate submission templates. Accessible to the **Owner** role only.
+
+### Database changes (migration `004_clients_add_portal_url`)
+
+Run after pulling this change:
+```bash
+alembic upgrade head
+```
+
+Two changes to the `clients` table:
+- `portal_url VARCHAR(500)` — URL of the client's candidate-tracking portal
+- `submission_format` widened from `VARCHAR(255)` → `TEXT` (stores a JSON array)
+
+### Clients API endpoints (Owner only)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/clients/` | List all clients with contacts |
+| POST | `/api/v1/clients/` | Create client + contacts (atomic transaction) |
+| GET | `/api/v1/clients/{id}` | Get a single client |
+| PUT | `/api/v1/clients/{id}` | Update client + granular contact diff |
+| PATCH | `/api/v1/clients/{id}/status` | Activate / Deactivate |
+
+### Submission template format
+
+`submission_format` stores a JSON array of field requirements, e.g.:
+
+```json
+[
+  { "field": "First Name",       "type": "text",     "required": true },
+  { "field": "Expected CTC",     "type": "number",   "required": true },
+  { "field": "Role Applied For", "type": "text",     "required": false },
+  { "field": "Notice Period",    "type": "text",     "required": true }
+]
+```
+
+The template is built in the UI using the **Submission Template Builder** — a grouped checklist of 26 system fields drawn from the Candidate model plus client-portal fields (Portal Status, Role Applied For, Availability Date, Cover Letter, Custom Notes). Each field can be toggled on/off and marked as required.
+
+> **Future:** `Role Applied For` is currently a free-text field. When the Job Requirements module is built it can be upgraded to a dynamic dropdown populated from that client's open `job_requirements`.
+
+### Frontend — `ClientsView.vue`
+
+- **List** — card-based list with search (company, industry, location), clickable Portal URL, Activate/Deactivate toggle, Edit button
+- **Modal** — three sections:
+  1. Company Info (name, industry, location, website, size, GST, payment terms, portal URL, billing address)
+  2. Contacts — granular per-contact edit; add new rows; remove individual contacts; backend diffs by contact `id`
+  3. Submission Template Builder — grouped field checklist with required toggles and a live tag preview
 
 ---
 

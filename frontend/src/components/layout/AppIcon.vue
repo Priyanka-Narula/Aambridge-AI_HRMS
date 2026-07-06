@@ -127,6 +127,15 @@ defineProps<{
       <path d="M8 13h8" />
       <path d="M8 17h5" />
     </template>
+
+    <!-- clients -->
+    <template v-else-if="name === 'clients'">
+      <path d="M3 21h18" />
+      <path d="M5 21V7l7-4 7 4v14" />
+      <path d="M9 21v-4h6v4" />
+      <rect x="9" y="9" width="2" height="2" />
+      <rect x="13" y="9" width="2" height="2" />
+    </template>
   </svg>
 </template>
 
