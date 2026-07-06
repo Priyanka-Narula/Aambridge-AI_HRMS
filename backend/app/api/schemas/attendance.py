@@ -11,6 +11,13 @@ class AttendanceRecordResponse(BaseModel):
     status: str  # "on_time" | "late" | "absent"
 
 
+class AttendancePolicyResponse(BaseModel):
+    checkin_expected: str
+    checkout_expected: str
+    late_threshold: str
+    timezone: str
+
+
 class RecruiterAttendanceRow(BaseModel):
     user_id: uuid.UUID
     first_name: str

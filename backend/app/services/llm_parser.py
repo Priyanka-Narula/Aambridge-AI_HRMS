@@ -24,6 +24,8 @@ EXTRACTION_SCHEMA = """{
   "current_location": "string or null",
   "preferred_location": "string or null",
   "total_experience_years": "number or null",
+  "uae_experience_years": "number or null (years worked in UAE, infer from UAE employers if possible)",
+  "industry": "string or null (e.g. IT, Finance, Healthcare)",
   "current_company": "string or null",
   "current_designation": "string or null",
   "current_ctc": "number or null",

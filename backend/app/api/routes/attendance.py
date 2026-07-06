@@ -4,7 +4,11 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.schemas.attendance import AttendanceRecordResponse, RecruiterAttendanceRow
+from app.api.schemas.attendance import (
+    AttendancePolicyResponse,
+    AttendanceRecordResponse,
+    RecruiterAttendanceRow,
+)
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_owner
@@ -14,6 +18,16 @@ from app.models.user_access import Role, User
 router = APIRouter(prefix="/api/v1/attendance", tags=["attendance"])
 
 _LATE_THRESHOLD = time(*[int(p) for p in settings.LATE_THRESHOLD.split(":")])
+
+
+@router.get("/policy", response_model=AttendancePolicyResponse)
+def get_attendance_policy():
+    return AttendancePolicyResponse(
+        checkin_expected=settings.CHECKIN_EXPECTED,
+        checkout_expected=settings.CHECKOUT_EXPECTED,
+        late_threshold=settings.LATE_THRESHOLD,
+        timezone=settings.OFFICE_TIMEZONE,
+    )
 
 
 def _office_tz() -> ZoneInfo:
