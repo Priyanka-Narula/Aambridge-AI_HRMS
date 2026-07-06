@@ -19,6 +19,19 @@ class RecruiterCreateRequest(BaseModel):
     joining_date: date | None = None
 
 
+class RecruiterUpdateRequest(BaseModel):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    email: EmailStr
+    phone: str | None = None
+    location: str | None = None
+    languages_spoken: str | None = None
+    employee_code: str = Field(min_length=1, max_length=50)
+    designation: str | None = None
+    team: str | None = None
+    joining_date: date | None = None
+
+
 class UserStatusUpdate(BaseModel):
     status: Literal["active", "inactive"]
 
@@ -28,6 +41,7 @@ class RecruiterSummary(BaseModel):
     employee_code: str
     designation: str | None = None
     team: str | None = None
+    joining_date: date | None = None
     status: str
 
 
@@ -37,6 +51,8 @@ class UserListItem(BaseModel):
     last_name: str
     email: EmailStr
     phone: str | None = None
+    location: str | None = None
+    languages_spoken: str | None = None
     status: str
     role: str
     recruiter: RecruiterSummary | None = None
