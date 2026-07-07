@@ -5,6 +5,7 @@ export interface RecruiterProfile {
   employee_code: string
   designation?: string | null
   team?: string | null
+  joining_date?: string | null
   status: string
 }
 
@@ -43,6 +44,8 @@ export interface RecruiterListItem {
   last_name: string
   email: string
   phone?: string | null
+  location?: string | null
+  languages_spoken?: string | null
   status: string
   role: UserRole
   recruiter?: RecruiterProfile | null
@@ -54,6 +57,19 @@ export interface RecruiterCreatePayload {
   last_name: string
   email: string
   password: string
+  phone?: string | null
+  location?: string | null
+  languages_spoken?: string | null
+  employee_code: string
+  designation?: string | null
+  team?: string | null
+  joining_date?: string | null
+}
+
+export interface RecruiterUpdatePayload {
+  first_name: string
+  last_name: string
+  email: string
   phone?: string | null
   location?: string | null
   languages_spoken?: string | null

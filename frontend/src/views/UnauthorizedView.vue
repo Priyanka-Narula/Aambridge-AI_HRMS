@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import HrmsAuthLayout from '@/components/ui/HrmsAuthLayout.vue'
+import AppLogo from '@/components/layout/AppLogo.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
@@ -19,7 +20,7 @@ function logout() {
 <template>
   <HrmsAuthLayout>
     <div class="hrms-auth-brand">
-      <div class="hrms-auth-logo">!</div>
+      <AppLogo variant="auth" />
       <h1 class="hrms-page-title hrms-page-title--sm">Access Denied</h1>
       <p class="hrms-page-subtitle">You do not have permission to view this page.</p>
     </div>

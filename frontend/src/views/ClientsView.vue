@@ -2,16 +2,15 @@
 import { computed, onMounted, ref } from 'vue'
 import {
   createClient,
+  fetchClient,
   fetchClients,
   updateClient,
   updateClientStatus,
 } from '@/api/clients'
 import HrmsAlert from '@/components/ui/HrmsAlert.vue'
 import HrmsModal from '@/components/ui/HrmsModal.vue'
-import PageHeader from '@/components/ui/PageHeader.vue'
-import PageLayout from '@/components/ui/PageLayout.vue'
 import type { ClientContactItem, ClientCreatePayload, ClientListItem, SubmissionField } from '@/types/clients'
-import { avatarHue, initials } from '@/utils/format'
+import { avatarHue, EMPTY, initials, orEmpty } from '@/utils/format'
 
 // ---------------------------------------------------------------------------
 // System fields catalogue — derived from Candidate model + portal fields
@@ -38,6 +37,8 @@ const SYSTEM_FIELDS: SystemFieldDef[] = [
   { group: 'Location', key: 'preferred_location', label: 'Preferred Location', type: 'text' },
   // Professional
   { group: 'Professional', key: 'total_experience_years', label: 'Total Experience (Years)', type: 'number' },
+  { group: 'Professional', key: 'uae_experience_years', label: 'UAE Experience (Years)', type: 'number' },
+  { group: 'Professional', key: 'industry', label: 'Industry', type: 'text' },
   { group: 'Professional', key: 'current_company', label: 'Current Company', type: 'text' },
   { group: 'Professional', key: 'current_designation', label: 'Current Designation', type: 'text' },
   { group: 'Professional', key: 'current_ctc', label: 'Current CTC', type: 'number' },
@@ -64,6 +65,8 @@ const SYSTEM_FIELD_GROUPS = [...new Set(SYSTEM_FIELDS.map((f) => f.group))]
 // State
 // ---------------------------------------------------------------------------
 const clients = ref<ClientListItem[]>([])
+const selected = ref<ClientListItem | null>(null)
+const activeTab = ref<'overview' | 'contacts' | 'template'>('overview')
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
@@ -171,6 +174,19 @@ async function loadClients() {
 
 onMounted(loadClients)
 
+async function selectClient(client: ClientListItem) {
+  activeTab.value = 'overview'
+  try {
+    selected.value = await fetchClient(client.id)
+  } catch {
+    selected.value = client
+  }
+}
+
+function closePanel() {
+  selected.value = null
+}
+
 // ---------------------------------------------------------------------------
 // Dialog open / close
 // ---------------------------------------------------------------------------
@@ -181,25 +197,27 @@ function openCreate() {
   showDialog.value = true
 }
 
-function openEdit(client: ClientListItem) {
-  editingClient.value = client
+function openEdit(client?: ClientListItem) {
+  const target = client ?? selected.value
+  if (!target) return
+  editingClient.value = target
   form.value = {
-    company_name: client.company_name,
-    industry: client.industry ?? null,
-    location: client.location ?? null,
-    website: client.website ?? null,
-    company_size: client.company_size ?? null,
-    billing_address: client.billing_address ?? null,
-    gst_number: client.gst_number ?? null,
-    payment_terms: client.payment_terms ?? null,
-    portal_url: client.portal_url ?? null,
-    submission_format: client.submission_format ?? null,
+    company_name: target.company_name,
+    industry: target.industry ?? null,
+    location: target.location ?? null,
+    website: target.website ?? null,
+    company_size: target.company_size ?? null,
+    billing_address: target.billing_address ?? null,
+    gst_number: target.gst_number ?? null,
+    payment_terms: target.payment_terms ?? null,
+    portal_url: target.portal_url ?? null,
+    submission_format: target.submission_format ?? null,
     contacts:
-      client.contacts.length > 0
-        ? client.contacts.map((c) => ({ ...c }))
+      target.contacts.length > 0
+        ? target.contacts.map((c) => ({ ...c }))
         : [emptyContact()],
   }
-  selectedFields.value = hydrateSelectedFields(client.submission_format)
+  selectedFields.value = hydrateSelectedFields(target.submission_format)
   showDialog.value = true
 }
 
@@ -230,6 +248,7 @@ async function submitClient() {
     if (editingClient.value) {
       const updated = await updateClient(editingClient.value.id, payload)
       clients.value = clients.value.map((c) => (c.id === updated.id ? updated : c))
+      if (selected.value?.id === updated.id) selected.value = updated
       success.value = `${updated.company_name} updated`
     } else {
       const created = await createClient(payload)
@@ -253,6 +272,7 @@ async function toggleStatus(client: ClientListItem) {
   try {
     const updated = await updateClientStatus(client.id, nextStatus)
     clients.value = clients.value.map((c) => (c.id === updated.id ? updated : c))
+    if (selected.value?.id === updated.id) selected.value = updated
     success.value = `${updated.company_name} set to ${nextStatus}`
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to update status'
@@ -261,104 +281,225 @@ async function toggleStatus(client: ClientListItem) {
 </script>
 
 <template>
-  <PageLayout>
-    <PageHeader
-      title="Client Management"
-      subtitle="Manage client accounts, contacts, and submission templates"
-      :count="`${clients.length} clients`"
-      size="default"
-    >
-      <template #actions>
-        <button type="button" class="hrms-btn hrms-btn--primary" @click="openCreate">
-          Add Client
-        </button>
-      </template>
-    </PageHeader>
-
-    <HrmsAlert v-if="error" type="error" dismissible @dismiss="error = ''">
-      {{ error }}
-    </HrmsAlert>
-    <HrmsAlert v-if="success" type="success" dismissible @dismiss="success = ''">
-      {{ success }}
-    </HrmsAlert>
-
-    <!-- Search -->
-    <div class="hrms-search-bar">
-      <input
-        v-model="searchQuery"
-        class="hrms-input"
-        type="search"
-        placeholder="Search by company, industry or location…"
-      />
-    </div>
-
-    <div v-if="loading" class="hrms-loading">Loading clients…</div>
-
-    <div v-else class="hrms-list-stack">
-      <article
-        v-for="client in filteredClients"
-        :key="client.id"
-        class="hrms-card hrms-card--flat hrms-entity-card"
-      >
-        <div class="hrms-avatar" :style="`--hue: ${avatarHue(client.id)}`">
-          {{ initials(client.company_name.split(' ')[0], client.company_name.split(' ')[1] ?? '') }}
-        </div>
-
-        <div class="hrms-entity-card__body">
-          <div class="hrms-entity-card__name-row">
-            <span class="hrms-entity-card__name">{{ client.company_name }}</span>
-            <span
-              class="hrms-status-badge"
-              :style="`--sc: ${client.status === 'active' ? 'var(--hrms-success)' : 'var(--hrms-text-muted)'}`"
-            >
-              {{ client.status }}
-            </span>
+  <div class="hrms-split">
+    <div class="hrms-split__main" :class="{ 'hrms-split__main--narrow': selected }">
+      <div class="hrms-split__header">
+        <div class="hrms-page-header hrms-page-header--compact">
+          <div>
+            <h1 class="hrms-page-title hrms-page-title--sm">Client Management</h1>
+            <span class="hrms-page-count">{{ filteredClients.length }} clients</span>
           </div>
-          <div class="hrms-entity-card__role">
-            {{ [client.industry, client.location].filter(Boolean).join(' · ') || 'No details' }}
-          </div>
-          <div class="hrms-entity-card__meta">
-            <span v-if="client.company_size">{{ client.company_size }} employees</span>
-            <span v-if="client.contacts.length">
-              {{ client.contacts.length }} contact{{ client.contacts.length !== 1 ? 's' : '' }}
-            </span>
-            <a
-              v-if="client.portal_url"
-              :href="client.portal_url"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="hrms-link"
-              @click.stop
-            >
-              Portal ↗
-            </a>
-          </div>
-        </div>
-
-        <div class="hrms-entity-card__aside">
-          <button type="button" class="hrms-btn hrms-btn--sm" @click="openEdit(client)">
-            Edit
-          </button>
-          <button
-            type="button"
-            class="hrms-btn hrms-btn--sm"
-            :class="client.status === 'active' ? 'hrms-btn--danger' : 'hrms-btn--primary'"
-            @click="toggleStatus(client)"
-          >
-            {{ client.status === 'active' ? 'Deactivate' : 'Activate' }}
+          <button type="button" class="hrms-btn hrms-btn--primary" @click="openCreate">
+            Add Client
           </button>
         </div>
-      </article>
 
-      <div v-if="filteredClients.length === 0" class="hrms-empty">
-        <p v-if="searchQuery">No clients match "{{ searchQuery }}".</p>
-        <p v-else>No clients yet. Add your first client.</p>
+        <div class="hrms-controls">
+          <input
+            v-model="searchQuery"
+            class="hrms-input hrms-search-input"
+            type="search"
+            placeholder="Search by company, industry or location…"
+          />
+        </div>
+      </div>
+
+      <HrmsAlert v-if="error" type="error" dismissible @dismiss="error = ''">{{ error }}</HrmsAlert>
+      <HrmsAlert v-if="success" type="success" dismissible @dismiss="success = ''">{{ success }}</HrmsAlert>
+
+      <div v-if="loading" class="hrms-loading">Loading clients…</div>
+
+      <div v-else class="hrms-split__list hrms-scroll">
+        <div
+          v-for="client in filteredClients"
+          :key="client.id"
+          class="hrms-card hrms-card--interactive hrms-entity-card"
+          :class="{ 'hrms-card--selected': selected?.id === client.id }"
+          @click="selectClient(client)"
+        >
+          <div class="hrms-avatar" :style="`--hue: ${avatarHue(client.id)}`">
+            {{ initials(client.company_name.split(' ')[0] ?? '', client.company_name.split(' ')[1] ?? '') }}
+          </div>
+
+          <div class="hrms-entity-card__body">
+            <div class="hrms-entity-card__name-row">
+              <span class="hrms-entity-card__name">{{ client.company_name }}</span>
+              <span
+                class="hrms-status-badge"
+                :style="`--sc: ${client.status === 'active' ? 'var(--hrms-success)' : 'var(--hrms-text-muted)'}`"
+              >
+                {{ client.status }}
+              </span>
+            </div>
+            <div class="hrms-entity-card__role">
+              {{ [client.industry, client.location].filter(Boolean).join(' · ') || 'No details' }}
+            </div>
+            <div class="hrms-entity-card__meta">
+              <span v-if="client.company_size">{{ client.company_size }} employees</span>
+              <span v-if="client.contacts.length">
+                {{ client.contacts.length }} contact{{ client.contacts.length !== 1 ? 's' : '' }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="filteredClients.length === 0" class="hrms-empty">
+          <p v-if="searchQuery">No clients match "{{ searchQuery }}".</p>
+          <p v-else>No clients yet. Add your first client.</p>
+        </div>
       </div>
     </div>
 
-    <!-- ------------------------------------------------------------------ -->
-    <!-- Create / Edit Modal                                                  -->
-    <!-- ------------------------------------------------------------------ -->
+    <Transition name="panel">
+      <div v-if="selected" class="hrms-split__aside">
+        <div class="hrms-panel-header">
+          <button class="hrms-btn hrms-btn--icon" style="margin-bottom: 16px" @click="closePanel">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M13.5 4.5L4.5 13.5M4.5 4.5L13.5 13.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </button>
+
+          <div class="hrms-panel-hero">
+            <div class="hrms-avatar hrms-avatar--lg" :style="`--hue: ${avatarHue(selected.id)}`">
+              {{ initials(selected.company_name.split(' ')[0] ?? '', selected.company_name.split(' ')[1] ?? '') }}
+            </div>
+            <div>
+              <h2 class="hrms-panel-name">{{ selected.company_name }}</h2>
+              <p class="hrms-panel-role">
+                {{ [selected.industry, selected.location].filter(Boolean).join(' · ') || 'No details' }}
+              </p>
+              <span
+                class="hrms-status-badge hrms-status-badge--lg"
+                :style="`--sc: ${selected.status === 'active' ? 'var(--hrms-success)' : 'var(--hrms-text-muted)'}`"
+              >
+                {{ selected.status }}
+              </span>
+            </div>
+          </div>
+
+          <div class="hrms-actions hrms-actions--inline" style="padding-bottom: 16px">
+            <button type="button" class="hrms-btn hrms-btn--primary hrms-btn--sm" @click="openEdit()">Edit</button>
+            <button
+              type="button"
+              class="hrms-btn hrms-btn--sm"
+              :class="selected.status === 'active' ? 'hrms-btn--danger' : 'hrms-btn--primary'"
+              @click="toggleStatus(selected)"
+            >
+              {{ selected.status === 'active' ? 'Deactivate' : 'Activate' }}
+            </button>
+            <a
+              v-if="selected.portal_url"
+              :href="selected.portal_url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="hrms-btn hrms-btn--sm"
+            >Portal</a>
+          </div>
+        </div>
+
+        <div class="hrms-tabs">
+          <button
+            class="hrms-tab"
+            :class="{ 'hrms-tab--active': activeTab === 'overview' }"
+            @click="activeTab = 'overview'"
+          >Overview</button>
+          <button
+            class="hrms-tab"
+            :class="{ 'hrms-tab--active': activeTab === 'contacts' }"
+            @click="activeTab = 'contacts'"
+          >Contacts</button>
+          <button
+            class="hrms-tab"
+            :class="{ 'hrms-tab--active': activeTab === 'template' }"
+            @click="activeTab = 'template'"
+          >Template</button>
+        </div>
+
+        <div class="hrms-panel-body hrms-scroll">
+          <template v-if="activeTab === 'overview'">
+            <section class="hrms-section">
+              <h3 class="hrms-section-title">Company</h3>
+              <div class="hrms-info-grid">
+                <div class="hrms-info-item">
+                  <span class="hrms-info-label">Industry</span>
+                  <span class="hrms-info-value">{{ orEmpty(selected.industry) }}</span>
+                </div>
+                <div class="hrms-info-item">
+                  <span class="hrms-info-label">Location</span>
+                  <span class="hrms-info-value">{{ orEmpty(selected.location) }}</span>
+                </div>
+                <div class="hrms-info-item">
+                  <span class="hrms-info-label">Company Size</span>
+                  <span class="hrms-info-value">{{ orEmpty(selected.company_size) }}</span>
+                </div>
+                <div class="hrms-info-item">
+                  <span class="hrms-info-label">Website</span>
+                  <span class="hrms-info-value">
+                    <a v-if="selected.website" :href="selected.website" target="_blank" rel="noopener" class="hrms-info-link">{{ selected.website }}</a>
+                    <template v-else>{{ EMPTY }}</template>
+                  </span>
+                </div>
+                <div class="hrms-info-item">
+                  <span class="hrms-info-label">GST Number</span>
+                  <span class="hrms-info-value">{{ orEmpty(selected.gst_number) }}</span>
+                </div>
+                <div class="hrms-info-item">
+                  <span class="hrms-info-label">Payment Terms</span>
+                  <span class="hrms-info-value">{{ orEmpty(selected.payment_terms) }}</span>
+                </div>
+                <div class="hrms-info-item">
+                  <span class="hrms-info-label">Billing Address</span>
+                  <span class="hrms-info-value">{{ orEmpty(selected.billing_address) }}</span>
+                </div>
+              </div>
+            </section>
+          </template>
+
+          <template v-else-if="activeTab === 'contacts'">
+            <section class="hrms-section">
+              <h3 class="hrms-section-title">Contacts {{ selected.contacts.length }}</h3>
+              <div v-if="selected.contacts.length === 0" class="hrms-empty-inline">{{ EMPTY }}</div>
+              <div v-for="contact in selected.contacts" :key="contact.id ?? contact.name" class="clients-contact-card">
+                <div class="clients-contact-card__name">
+                  {{ contact.name }}
+                  <span v-if="contact.primary_contact" class="hrms-chip hrms-chip--accent">Primary</span>
+                </div>
+                <div class="clients-contact-card__role">{{ orEmpty(contact.designation) }}</div>
+                <div class="hrms-info-grid" style="margin-top: 8px">
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Email</span>
+                    <span class="hrms-info-value">{{ orEmpty(contact.email) }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Phone</span>
+                    <span class="hrms-info-value">{{ orEmpty(contact.phone) }}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </template>
+
+          <template v-else>
+            <section class="hrms-section">
+              <h3 class="hrms-section-title">Submission Template</h3>
+              <div v-if="!selected.submission_format?.length" class="hrms-empty-inline">No template configured</div>
+              <div v-else class="clients-template-preview clients-template-preview--panel">
+                <span
+                  v-for="f in selected.submission_format"
+                  :key="f.field"
+                  class="clients-template-tag"
+                  :class="{ 'clients-template-tag--required': f.required }"
+                >
+                  {{ f.field }}<template v-if="f.required"> *</template>
+                </span>
+              </div>
+            </section>
+          </template>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Create / Edit Modal -->
     <HrmsModal v-model="showDialog" :title="modalTitle">
 
       <!-- Section 1: Company Info -->
@@ -536,26 +677,12 @@ async function toggleStatus(client: ClientListItem) {
         </button>
       </template>
     </HrmsModal>
-  </PageLayout>
+  </div>
 </template>
 
 <style scoped>
-.hrms-search-bar {
-  margin-bottom: var(--hrms-space-4, 1rem);
-}
-
-.hrms-search-bar .hrms-input {
-  max-width: 400px;
-}
-
-.hrms-link {
-  color: var(--hrms-accent, #c4a35a);
-  font-size: 0.8rem;
-  text-decoration: none;
-}
-
-.hrms-link:hover {
-  text-decoration: underline;
+.clients-template-preview--panel {
+  margin-top: 0;
 }
 
 /* ---- Modal sections ---- */
@@ -708,6 +835,28 @@ async function toggleStatus(client: ClientListItem) {
   border-color: var(--hrms-accent, #c4a35a);
   color: var(--hrms-accent, #c4a35a);
   font-weight: 600;
+}
+
+.clients-contact-card {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--hrms-border, #e5e7eb);
+}
+
+.clients-contact-card:last-child {
+  border-bottom: none;
+}
+
+.clients-contact-card__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.clients-contact-card__role {
+  font-size: 0.82rem;
+  color: var(--hrms-text-muted, #888);
+  margin-top: 2px;
 }
 
 /* ---- Form helpers ---- */

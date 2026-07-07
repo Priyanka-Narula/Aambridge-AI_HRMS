@@ -252,7 +252,7 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
             </div>
             <div class="hrms-entity-card__role">
               {{ orEmpty(c.current_designation) }}
-              <span v-if="c.current_company"> Â· {{ c.current_company }}</span>
+              <span v-if="c.current_company"> {{ c.current_company }}</span>
             </div>
             <div class="hrms-entity-card__meta">
               <span v-if="c.total_experience_years">
@@ -261,6 +261,20 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
                   <path d="M6 3.5V6l1.5 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
                 </svg>
                 {{ c.total_experience_years }}y exp
+              </span>
+              <span v-if="c.uae_experience_years">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.2"/>
+                  <path d="M6 3.5V6l1.5 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                </svg>
+                {{ c.uae_experience_years }} y UAE
+              </span>
+              <span v-if="c.industry">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <rect x="1.5" y="2.5" width="9" height="7" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                  <path d="M4 5h4M4 7h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                </svg>
+                {{ c.industry }}
               </span>
               <span v-if="c.current_location">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -326,7 +340,7 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
               <h2 class="hrms-panel-name">{{ selected.first_name }} {{ selected.last_name }}</h2>
               <p class="hrms-panel-role">
                 {{ selected.current_designation ?? 'No designation' }}
-                <span v-if="selected.current_company"> Â· {{ selected.current_company }}</span>
+                <span v-if="selected.current_company"> {{ selected.current_company }}</span>
               </p>
               <span
                 class="hrms-status-badge hrms-status-badge--lg"
@@ -432,12 +446,16 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
                   <span class="hrms-info-label">Preferred Location</span>
                   <span class="hrms-info-value">{{ selected.preferred_location ?? EMPTY }}</span>
                 </div>
+                <div class="hrms-info-item">
+                  <span class="hrms-info-label">Industry</span>
+                  <span class="hrms-info-value">{{ selected.industry ?? EMPTY }}</span>
+                </div>
               </div>
             </section>
 
             <section class="hrms-section">
               <h3 class="hrms-section-title">Compensation & Availability</h3>
-              <div class="hrms-metric-grid">
+              <div class="hrms-metric-grid hrms-metric-grid--cols-4">
                 <div class="hrms-metric-card">
                   <div class="hrms-metric-label">Current CTC</div>
                   <div class="hrms-metric-value">{{ formatInr(selected.current_ctc) }}</div>
@@ -450,11 +468,15 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
                   <div class="hrms-metric-label">Notice Period</div>
                   <div class="hrms-metric-value">{{ selected.notice_period ?? EMPTY }}</div>
                 </div>
+                <div class="hrms-metric-card">
+                  <div class="hrms-metric-label">UAE Experience</div>
+                  <div class="hrms-metric-value">{{ selected.uae_experience_years != null ? `${selected.uae_experience_years}y` : EMPTY }}</div>
+                </div>
               </div>
             </section>
 
             <section class="hrms-section">
-              <h3 class="hrms-section-title">Skills Â· {{ selected.skills.length }}</h3>
+              <h3 class="hrms-section-title">Skills {{ selected.skills.length }}</h3>
               <div class="hrms-data-table hrms-data-table--cols-3" v-if="selected.skills.length">
                 <div class="hrms-data-table__row hrms-data-table__row--header">
                   <span>Skill</span>
@@ -471,7 +493,7 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
                     class="hrms-proficiency-chip"
                     :style="`--pc: ${proficiencyMeta[sk.proficiency_level ?? ''] ?? '#94a3b8'}`"
                   >{{ sk.proficiency_level ?? EMPTY }}</span>
-                  <span style="color: var(--hrms-text-secondary); font-size: 0.77rem">{{ sk.years_experience ? `${sk.years_experience}y` : EMPTY }}</span>
+                  <span style="color: var(--hrms-text-secondary); font-size: 0.77rem"> {{ sk.years_experience ? ` ${ sk.years_experience}y` : EMPTY }}</span>
                 </div>
               </div>
               <p v-else class="hrms-empty-inline">No skills recorded.</p>

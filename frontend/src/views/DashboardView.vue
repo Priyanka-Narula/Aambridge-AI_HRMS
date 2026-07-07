@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAttendanceStore } from '@/stores/attendance'
+import { formatOfficeTime } from '@/utils/format'
 
 const auth = useAuthStore()
 const attendance = useAttendanceStore()
@@ -26,7 +27,7 @@ let clockTimer: ReturnType<typeof setInterval>
 
 onMounted(async () => {
   clockTimer = setInterval(() => { now.value = new Date() }, 1000)
-  await attendance.fetchMyToday()
+  await Promise.all([attendance.fetchMyToday(), attendance.fetchPolicy()])
   if (auth.role === 'owner') {
     await attendance.fetchAllToday()
   }
@@ -100,12 +101,12 @@ const attendanceSummary = computed(() => {
           <span class="checkin-card__clock">{{ currentTime }}</span>
         </div>
 
-        <div class="checkin-card__schedule">
-          <span>In: <strong>9:30 AM</strong></span>
+        <div v-if="attendance.policy" class="checkin-card__schedule">
+          <span>In: <strong>{{ formatOfficeTime(attendance.policy.checkin_expected) }}</strong></span>
           <span class="sep">·</span>
-          <span>Out: <strong>6:30 PM</strong></span>
+          <span>Out: <strong>{{ formatOfficeTime(attendance.policy.checkout_expected) }}</strong></span>
           <span class="sep">·</span>
-          <span>Late after: <strong>10:00 AM</strong></span>
+          <span>Late after: <strong>{{ formatOfficeTime(attendance.policy.late_threshold) }}</strong></span>
         </div>
 
         <!-- Not yet checked in: show Check In button -->

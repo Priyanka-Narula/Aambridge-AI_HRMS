@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import HrmsAlert from '@/components/ui/HrmsAlert.vue'
 import HrmsAuthLayout from '@/components/ui/HrmsAuthLayout.vue'
+import AppLogo from '@/components/layout/AppLogo.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
@@ -27,8 +28,8 @@ async function handleSubmit() {
 <template>
   <HrmsAuthLayout>
     <div class="hrms-auth-brand">
-      <div class="hrms-auth-logo">A</div>
-      <h1 class="hrms-page-title hrms-page-title--sm">Aambridge-AI HRMS</h1>
+      <AppLogo variant="auth" />
+      <h1 class="hrms-page-title hrms-page-title--sm">HRMS</h1>
       <p class="hrms-page-subtitle">Sign in to your account</p>
     </div>
 

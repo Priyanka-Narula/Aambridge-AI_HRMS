@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import AppIcon from '@/components/layout/AppIcon.vue'
+import AppLogo from '@/components/layout/AppLogo.vue'
 import { useNavigation } from '@/composables/useNavigation'
 import { useAuthStore } from '@/stores/auth'
 import type { UserRole } from '@/types/auth'
@@ -37,13 +38,10 @@ const sidebarTagline = computed(() => {
 <template>
   <aside class="sidebar" :class="{ 'sidebar--open': open }" aria-label="Main navigation">
     <div class="sidebar__brand">
-      <div class="sidebar__logo" aria-hidden="true">
-        <span class="sidebar__logo-mark">A</span>
+      <div class="sidebar__logo">
+        <AppLogo variant="sidebar" />
       </div>
-      <div class="sidebar__brand-text">
-        <span class="sidebar__brand-name">Aambridge</span>
-        <span class="sidebar__brand-sub">AI HRMS</span>
-      </div>
+      
     </div>
 
     <p v-if="sidebarTagline" class="sidebar__tagline">{{ sidebarTagline }}</p>
@@ -106,8 +104,9 @@ const sidebarTagline = computed(() => {
 
 .sidebar__brand {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
   padding: 24px 20px 16px;
 }
 
@@ -115,32 +114,11 @@ const sidebarTagline = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 100%;
+  padding: 8px 10px;
   border-radius: 12px;
-  background: linear-gradient(135deg, var(--hrms-accent) 0%, #d4b87a 100%);
-  box-shadow: 0 4px 12px rgba(196, 163, 90, 0.35);
-}
-
-.sidebar__logo-mark {
-  font-family: var(--hrms-font-display);
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--hrms-primary-dark);
-  line-height: 1;
-}
-
-.sidebar__brand-text {
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar__brand-name {
-  font-family: var(--hrms-font-display);
-  font-size: 1.25rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .sidebar__brand-sub {
@@ -149,6 +127,7 @@ const sidebarTagline = computed(() => {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   opacity: 0.75;
+  padding-left: 2px;
 }
 
 .sidebar__tagline {

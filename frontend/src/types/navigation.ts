@@ -12,6 +12,7 @@ export type NavIconName =
   | 'approvals'
   | 'reports'
   | 'organizations'
+  | 'clients'
   | 'settings'
   | 'job-postings'
 
