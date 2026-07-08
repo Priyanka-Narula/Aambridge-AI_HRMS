@@ -38,6 +38,10 @@ class UserStatusUpdate(BaseModel):
     status: Literal["active", "inactive"]
 
 
+class RecruiterPasswordResetRequest(BaseModel):
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class RecruiterSummary(BaseModel):
     id: uuid.UUID
     employee_code: str

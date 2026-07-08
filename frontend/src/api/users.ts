@@ -25,3 +25,10 @@ export async function updateUserStatus(userId: string, status: 'active' | 'inact
   const { data } = await apiClient.patch<RecruiterListItem>(`/api/v1/users/${userId}/status`, { status })
   return data
 }
+
+export async function resetRecruiterPassword(userId: string, newPassword: string): Promise<RecruiterListItem> {
+  const { data } = await apiClient.post<RecruiterListItem>(`/api/v1/users/${userId}/reset-password`, {
+    new_password: newPassword,
+  })
+  return data
+}

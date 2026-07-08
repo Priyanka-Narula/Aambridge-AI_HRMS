@@ -4,6 +4,7 @@ import {
   createRecruiter,
   fetchUser,
   fetchUsers,
+  resetRecruiterPassword,
   updateRecruiter,
   updateUserStatus,
 } from '@/api/users'
@@ -20,6 +21,10 @@ const saving = ref(false)
 const error = ref('')
 const success = ref('')
 const showDialog = ref(false)
+const showResetDialog = ref(false)
+const resetPassword = ref('')
+const resetPasswordConfirm = ref('')
+const resettingPassword = ref(false)
 const editingUser = ref<RecruiterListItem | null>(null)
 const searchQuery = ref('')
 
@@ -132,6 +137,40 @@ function openEdit(user?: RecruiterListItem) {
   editingUser.value = target
   form.value = userToForm(target)
   showDialog.value = true
+}
+
+function openResetPassword() {
+  if (!selected.value) return
+  resetPassword.value = ''
+  resetPasswordConfirm.value = ''
+  showResetDialog.value = true
+}
+
+async function submitResetPassword() {
+  if (!selected.value) return
+  if (resetPassword.value.length < 8) {
+    error.value = 'Password must be at least 8 characters'
+    return
+  }
+  if (resetPassword.value !== resetPasswordConfirm.value) {
+    error.value = 'Passwords do not match'
+    return
+  }
+
+  resettingPassword.value = true
+  error.value = ''
+  success.value = ''
+  try {
+    await resetRecruiterPassword(selected.value.id, resetPassword.value)
+    success.value = `Password reset for ${selected.value.first_name} ${selected.value.last_name}. New password: ${resetPassword.value}`
+    showResetDialog.value = false
+    resetPassword.value = ''
+    resetPasswordConfirm.value = ''
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to reset password'
+  } finally {
+    resettingPassword.value = false
+  }
 }
 
 async function submitRecruiter() {
@@ -279,6 +318,9 @@ const formatDate = (d: string | null | undefined) =>
             <button type="button" class="hrms-btn hrms-btn--primary hrms-btn--sm" @click="openEdit()">
               Edit
             </button>
+            <button type="button" class="hrms-btn hrms-btn--sm" @click="openResetPassword">
+              Reset Password
+            </button>
             <button
               type="button"
               class="hrms-btn hrms-btn--sm"
@@ -420,6 +462,33 @@ const formatDate = (d: string | null | undefined) =>
         <button type="button" class="hrms-btn" @click="showDialog = false">Cancel</button>
         <button type="button" class="hrms-btn hrms-btn--primary" :disabled="saving" @click="submitRecruiter">
           {{ saving ? 'Saving…' : editingUser ? 'Save Changes' : 'Create' }}
+        </button>
+      </template>
+    </HrmsModal>
+
+    <HrmsModal
+      v-model="showResetDialog"
+      :title="selected ? `Reset password — ${selected.first_name} ${selected.last_name}` : 'Reset Password'"
+    >
+      <div class="hrms-form-grid">
+        <label class="hrms-field hrms-field--wide">
+          <span class="hrms-label">New password</span>
+          <input v-model="resetPassword" class="hrms-input" type="password" required minlength="8" placeholder="" />
+        </label>
+        <label class="hrms-field hrms-field--wide">
+          <span class="hrms-label">Confirm new password</span>
+          <input v-model="resetPasswordConfirm" class="hrms-input" type="password" required minlength="8" placeholder="" />
+        </label>
+      </div>
+      <template #footer>
+        <button type="button" class="hrms-btn" @click="showResetDialog = false">Cancel</button>
+        <button
+          type="button"
+          class="hrms-btn hrms-btn--primary"
+          :disabled="resettingPassword || !resetPassword || !resetPasswordConfirm"
+          @click="submitResetPassword"
+        >
+          {{ resettingPassword ? 'Resetting…' : 'Reset Password' }}
         </button>
       </template>
     </HrmsModal>

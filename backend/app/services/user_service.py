@@ -134,7 +134,15 @@ def update_recruiter(db: Session, user_id: uuid.UUID, payload: RecruiterUpdateRe
 
 def update_user_status(db: Session, user_id: uuid.UUID, payload: UserStatusUpdate) -> User:
     user = get_user_or_404(db, user_id)
+    user.status = payload.status
     if user.recruiter:
         user.recruiter.status = payload.status
+    db.commit()
+    return _user_query(db).filter(User.id == user_id).one()
+
+
+def reset_recruiter_password(db: Session, user_id: uuid.UUID, new_password: str) -> User:
+    user = get_user_or_404(db, user_id)
+    user.password_hash = hash_password(new_password)
     db.commit()
     return _user_query(db).filter(User.id == user_id).one()
