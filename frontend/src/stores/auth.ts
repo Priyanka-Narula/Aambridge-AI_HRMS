@@ -56,6 +56,32 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function updateProfile(payload: authApi.UpdateMePayload) {
+    loading.value = true
+    error.value = ''
+    try {
+      user.value = await authApi.updateMe(payload)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to update profile'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function changePassword(current_password: string, new_password: string) {
+    loading.value = true
+    error.value = ''
+    try {
+      await authApi.changePassword({ current_password, new_password })
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to change password'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   function logout() {
     authApi.logout()
     user.value = null
@@ -78,6 +104,8 @@ export const useAuthStore = defineStore('auth', () => {
     notificationCount,
     initialize,
     login,
+    updateProfile,
+    changePassword,
     logout,
     setDateRange,
   }

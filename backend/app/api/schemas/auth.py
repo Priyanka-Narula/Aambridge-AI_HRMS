@@ -36,3 +36,17 @@ class UserMeResponse(BaseModel):
     role: str
     recruiter: RecruiterProfile | None = None
     created_at: datetime | None = None
+
+
+class UserMeUpdateRequest(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+    phone: str | None = None
+    location: str | None = None
+    languages_spoken: str | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str

@@ -62,6 +62,39 @@ def serialize_user(user: User) -> dict:
     }
 
 
+def update_me(db: Session, user: User, data: dict) -> User:
+    email = str(data.get("email") or "").lower()
+    if not email:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Email is required")
+
+    existing = db.query(User).filter(User.email == email, User.id != user.id).first()
+    if existing:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+
+    user.first_name = data.get("first_name") or user.first_name
+    user.last_name = data.get("last_name") or user.last_name
+    user.email = email
+    user.phone = data.get("phone")
+    user.location = data.get("location")
+    user.languages_spoken = data.get("languages_spoken")
+    db.commit()
+    return (
+        db.query(User)
+        .options(joinedload(User.role), joinedload(User.recruiter))
+        .filter(User.id == user.id)
+        .one()
+    )
+
+
+def change_password(db: Session, user: User, current_password: str, new_password: str) -> None:
+    if not verify_password(current_password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+    if not new_password or len(new_password) < 8:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="New password is too short")
+    user.password_hash = hash_password(new_password)
+    db.commit()
+
+
 def ensure_bootstrap_owner(db: Session) -> None:
     owner_role = db.query(Role).filter(Role.name == ROLE_OWNER).first()
     if not owner_role:
