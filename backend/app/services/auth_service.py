@@ -52,6 +52,7 @@ def serialize_user(user: User) -> dict:
         "first_name": user.first_name,
         "last_name": user.last_name,
         "email": user.email,
+        "personal_email": user.personal_email,
         "phone": user.phone,
         "location": user.location,
         "languages_spoken": user.languages_spoken,
@@ -74,6 +75,7 @@ def update_me(db: Session, user: User, data: dict) -> User:
     user.first_name = data.get("first_name") or user.first_name
     user.last_name = data.get("last_name") or user.last_name
     user.email = email
+    user.personal_email = str(data.get("personal_email") or "").lower() or None
     user.phone = data.get("phone")
     user.location = data.get("location")
     user.languages_spoken = data.get("languages_spoken")

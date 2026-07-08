@@ -26,6 +26,7 @@ class User(Base, TimestampMixin):
     location: Mapped[str | None] = mapped_column(String(255))
     languages_spoken: Mapped[str | None] = mapped_column(String(255))
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    personal_email: Mapped[str | None] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(50))
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role_id: Mapped[uuid.UUID] = mapped_column(

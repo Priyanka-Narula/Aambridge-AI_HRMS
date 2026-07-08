@@ -52,7 +52,7 @@ export const navigationItems: NavItem[] = [
   },
   {
     id: 'settings',
-    label: 'Settings',
+    label: 'Profile',
     icon: 'settings',
     route: '/settings',
     roles: ['owner', 'recruiter'],

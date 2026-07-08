@@ -8,6 +8,7 @@ export interface UpdateMePayload {
   first_name: string
   last_name: string
   email: string
+  personal_email?: string | null
   phone?: string | null
   location?: string | null
   languages_spoken?: string | null

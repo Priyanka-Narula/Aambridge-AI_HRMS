@@ -29,6 +29,7 @@ const emptyForm = (): RecruiterForm => ({
   first_name: '',
   last_name: '',
   email: '',
+  personal_email: '',
   password: '',
   phone: '',
   location: '',
@@ -64,6 +65,7 @@ function userToForm(user: RecruiterListItem): RecruiterForm {
     first_name: user.first_name,
     last_name: user.last_name,
     email: user.email,
+    personal_email: user.personal_email ?? '',
     password: '',
     phone: user.phone ?? '',
     location: user.location ?? '',
@@ -80,6 +82,7 @@ function toUpdatePayload(): RecruiterUpdatePayload {
     first_name: form.value.first_name,
     last_name: form.value.last_name,
     email: form.value.email,
+    personal_email: form.value.personal_email || null,
     phone: form.value.phone || null,
     location: form.value.location || null,
     languages_spoken: form.value.languages_spoken || null,
@@ -147,12 +150,13 @@ async function submitRecruiter() {
         phone: form.value.phone || null,
         location: form.value.location || null,
         languages_spoken: form.value.languages_spoken || null,
+        personal_email: form.value.personal_email || null,
         designation: form.value.designation || null,
         team: form.value.team || null,
         joining_date: form.value.joining_date || null,
       })
       users.value = [created, ...users.value]
-      success.value = `Recruiter ${created.first_name} ${created.last_name} created`
+      success.value = `Recruiter ${created.first_name} ${created.last_name} created. Password: ${form.value.password}`
     }
     showDialog.value = false
   } catch (err) {
@@ -310,6 +314,10 @@ const formatDate = (d: string | null | undefined) =>
                   <a :href="`mailto:${selected.email}`" class="hrms-info-value hrms-info-link">{{ selected.email }}</a>
                 </div>
                 <div class="hrms-info-item">
+                  <span class="hrms-info-label">Personal Email</span>
+                  <span class="hrms-info-value">{{ orEmpty(selected.personal_email) }}</span>
+                </div>
+                <div class="hrms-info-item">
                   <span class="hrms-info-label">Phone</span>
                   <span class="hrms-info-value">{{ orEmpty(selected.phone) }}</span>
                 </div>
@@ -368,11 +376,15 @@ const formatDate = (d: string | null | undefined) =>
         </label>
         <label class="hrms-field">
           <span class="hrms-label">Email</span>
-          <input v-model="form.email" class="hrms-input" type="email" required />
+          <input v-model="form.email" class="hrms-input" type="email" required placeholder="" />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Personal mail id</span>
+          <input v-model="form.personal_email" class="hrms-input" type="email" placeholder="" />
         </label>
         <label v-if="!editingUser" class="hrms-field">
           <span class="hrms-label">Password</span>
-          <input v-model="form.password" class="hrms-input" type="password" required />
+          <input v-model="form.password" class="hrms-input" type="password" required placeholder="" />
         </label>
         <label class="hrms-field">
           <span class="hrms-label">Employee code</span>

@@ -14,6 +14,7 @@ export interface AuthUser {
   first_name: string
   last_name: string
   email: string
+  personal_email?: string | null
   phone?: string | null
   location?: string | null
   languages_spoken?: string | null
@@ -43,6 +44,7 @@ export interface RecruiterListItem {
   first_name: string
   last_name: string
   email: string
+  personal_email?: string | null
   phone?: string | null
   location?: string | null
   languages_spoken?: string | null
@@ -56,6 +58,7 @@ export interface RecruiterCreatePayload {
   first_name: string
   last_name: string
   email: string
+  personal_email?: string | null
   password: string
   phone?: string | null
   location?: string | null
@@ -70,6 +73,7 @@ export interface RecruiterUpdatePayload {
   first_name: string
   last_name: string
   email: string
+  personal_email?: string | null
   phone?: string | null
   location?: string | null
   languages_spoken?: string | null

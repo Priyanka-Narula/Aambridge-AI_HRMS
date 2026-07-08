@@ -29,6 +29,7 @@ class UserMeResponse(BaseModel):
     first_name: str
     last_name: str
     email: EmailStr
+    personal_email: EmailStr | None = None
     phone: str | None = None
     location: str | None = None
     languages_spoken: str | None = None
@@ -42,6 +43,7 @@ class UserMeUpdateRequest(BaseModel):
     first_name: str
     last_name: str
     email: EmailStr
+    personal_email: EmailStr | None = None
     phone: str | None = None
     location: str | None = None
     languages_spoken: str | None = None

@@ -9,6 +9,7 @@ class RecruiterCreateRequest(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
     email: EmailStr
+    personal_email: EmailStr | None = None
     password: str = Field(min_length=8, max_length=128)
     phone: str | None = None
     location: str | None = None
@@ -23,6 +24,7 @@ class RecruiterUpdateRequest(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
     email: EmailStr
+    personal_email: EmailStr | None = None
     phone: str | None = None
     location: str | None = None
     languages_spoken: str | None = None
@@ -50,6 +52,7 @@ class UserListItem(BaseModel):
     first_name: str
     last_name: str
     email: EmailStr
+    personal_email: EmailStr | None = None
     phone: str | None = None
     location: str | None = None
     languages_spoken: str | None = None

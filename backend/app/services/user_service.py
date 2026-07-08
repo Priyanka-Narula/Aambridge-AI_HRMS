@@ -38,6 +38,7 @@ def serialize_user_list_item(user: User) -> dict:
         "first_name": user.first_name,
         "last_name": user.last_name,
         "email": user.email,
+        "personal_email": user.personal_email,
         "phone": user.phone,
         "location": user.location,
         "languages_spoken": user.languages_spoken,
@@ -63,6 +64,7 @@ def create_recruiter(db: Session, payload: RecruiterCreateRequest) -> User:
         first_name=payload.first_name,
         last_name=payload.last_name,
         email=email,
+        personal_email=str(payload.personal_email).lower() if payload.personal_email else None,
         phone=payload.phone,
         location=payload.location,
         languages_spoken=payload.languages_spoken,
@@ -116,6 +118,7 @@ def update_recruiter(db: Session, user_id: uuid.UUID, payload: RecruiterUpdateRe
     user.first_name = payload.first_name
     user.last_name = payload.last_name
     user.email = email
+    user.personal_email = str(payload.personal_email).lower() if payload.personal_email else None
     user.phone = payload.phone
     user.location = payload.location
     user.languages_spoken = payload.languages_spoken
