@@ -174,6 +174,15 @@ async function submitResetPassword() {
 }
 
 async function submitRecruiter() {
+  if (!form.value.email.trim()) {
+    error.value = 'Email is required'
+    return
+  }
+  if (!editingUser.value && !form.value.password) {
+    error.value = 'Password is required'
+    return
+  }
+
   saving.value = true
   error.value = ''
   success.value = ''
@@ -407,30 +416,44 @@ const formatDate = (d: string | null | undefined) =>
     </Transition>
 
     <HrmsModal v-model="showDialog" :title="modalTitle">
-      <div class="hrms-form-grid">
+      <form id="recruiter-form" class="hrms-form-grid" autocomplete="off" @submit.prevent="submitRecruiter">
+        <input
+          type="text"
+          tabindex="-1"
+          aria-hidden="true"
+          autocomplete="username"
+          style="display: none"
+        />
+        <input
+          type="password"
+          tabindex="-1"
+          aria-hidden="true"
+          autocomplete="current-password"
+          style="display: none"
+        />
         <label class="hrms-field">
           <span class="hrms-label">First name</span>
-          <input v-model="form.first_name" class="hrms-input" type="text" required />
+          <input v-model="form.first_name" class="hrms-input" type="text" required autocomplete="off" />
         </label>
         <label class="hrms-field">
           <span class="hrms-label">Last name</span>
-          <input v-model="form.last_name" class="hrms-input" type="text" required />
+          <input v-model="form.last_name" class="hrms-input" type="text" required autocomplete="off" />
         </label>
         <label class="hrms-field">
-          <span class="hrms-label">Email</span>
-          <input v-model="form.email" class="hrms-input" type="email" required placeholder="" />
+          <span class="hrms-label">Email *</span>
+          <input v-model="form.email" class="hrms-input" type="email" required autocomplete="off" />
         </label>
         <label class="hrms-field">
           <span class="hrms-label">Personal mail id</span>
-          <input v-model="form.personal_email" class="hrms-input" type="email" placeholder="" />
+          <input v-model="form.personal_email" class="hrms-input" type="email" autocomplete="off" />
         </label>
         <label v-if="!editingUser" class="hrms-field">
-          <span class="hrms-label">Password</span>
-          <input v-model="form.password" class="hrms-input" type="password" required placeholder="" />
+          <span class="hrms-label">Password *</span>
+          <input v-model="form.password" class="hrms-input" type="password" required autocomplete="new-password" />
         </label>
         <label class="hrms-field">
           <span class="hrms-label">Employee code</span>
-          <input v-model="form.employee_code" class="hrms-input" type="text" required />
+          <input v-model="form.employee_code" class="hrms-input" type="text" required placeholder="000" />
         </label>
         <label class="hrms-field">
           <span class="hrms-label">Phone</span>
@@ -456,11 +479,11 @@ const formatDate = (d: string | null | undefined) =>
           <span class="hrms-label">Joining date</span>
           <input v-model="form.joining_date" class="hrms-input" type="date" />
         </label>
-      </div>
+      </form>
 
       <template #footer>
         <button type="button" class="hrms-btn" @click="showDialog = false">Cancel</button>
-        <button type="button" class="hrms-btn hrms-btn--primary" :disabled="saving" @click="submitRecruiter">
+        <button type="submit" form="recruiter-form" class="hrms-btn hrms-btn--primary" :disabled="saving">
           {{ saving ? 'Saving…' : editingUser ? 'Save Changes' : 'Create' }}
         </button>
       </template>
@@ -470,23 +493,23 @@ const formatDate = (d: string | null | undefined) =>
       v-model="showResetDialog"
       :title="selected ? `Reset password — ${selected.first_name} ${selected.last_name}` : 'Reset Password'"
     >
-      <div class="hrms-form-grid">
+      <form id="reset-password-form" class="hrms-form-grid" autocomplete="off" @submit.prevent="submitResetPassword">
         <label class="hrms-field hrms-field--wide">
           <span class="hrms-label">New password</span>
-          <input v-model="resetPassword" class="hrms-input" type="password" required minlength="8" placeholder="" />
+          <input v-model="resetPassword" class="hrms-input" type="password" required minlength="8" autocomplete="new-password" />
         </label>
         <label class="hrms-field hrms-field--wide">
           <span class="hrms-label">Confirm new password</span>
-          <input v-model="resetPasswordConfirm" class="hrms-input" type="password" required minlength="8" placeholder="" />
+          <input v-model="resetPasswordConfirm" class="hrms-input" type="password" required minlength="8" autocomplete="new-password" />
         </label>
-      </div>
+      </form>
       <template #footer>
         <button type="button" class="hrms-btn" @click="showResetDialog = false">Cancel</button>
         <button
-          type="button"
+          type="submit"
+          form="reset-password-form"
           class="hrms-btn hrms-btn--primary"
           :disabled="resettingPassword || !resetPassword || !resetPasswordConfirm"
-          @click="submitResetPassword"
         >
           {{ resettingPassword ? 'Resetting…' : 'Reset Password' }}
         </button>
