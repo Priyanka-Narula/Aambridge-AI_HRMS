@@ -30,17 +30,17 @@ export const navigationItems: NavItem[] = [
     roles: ['owner', 'recruiter'],
   },
   {
+    id: 'job-requirements',
+    label: 'Job Requirements',
+    icon: 'job-postings',
+    route: '/job-requirements',
+    roles: ['owner', 'recruiter'],
+  },
+  {
     id: 'pipeline',
     label: 'Pipeline',
     icon: 'pipeline',
     route: '/pipeline',
-    roles: ['owner', 'recruiter'],
-  },
-  {
-    id: 'recruitment',
-    label: 'Recruitment',
-    icon: 'recruitment',
-    route: '/recruitment',
     roles: ['owner', 'recruiter'],
   },
   {
