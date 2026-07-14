@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -70,3 +70,4 @@ class JobRequirementListItem(BaseModel):
     requirement_type: str | None = None
     created_by: uuid.UUID
     created_at: datetime | None = None
+    client_submission_format: list[dict[str, Any]] | None = None

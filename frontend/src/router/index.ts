@@ -81,6 +81,18 @@ const router = createRouter({
           meta: { title: 'Job Requirements', roles: ['owner', 'recruiter'] },
         },
         {
+          path: 'job-requirements/:id',
+          name: 'job-requirement-detail',
+          component: () => import('@/views/JobRequirementDetailView.vue'),
+          meta: { title: 'Job Requirement', roles: ['owner', 'recruiter'] },
+        },
+        {
+          path: 'submissions-dashboard',
+          name: 'submissions-dashboard',
+          component: () => import('@/views/OwnerDashboardView.vue'),
+          meta: { title: 'Submissions Dashboard', roles: ['owner'] },
+        },
+        {
           path: 'reports',
           name: 'reports',
           component: () => import('@/views/PlaceholderView.vue'),

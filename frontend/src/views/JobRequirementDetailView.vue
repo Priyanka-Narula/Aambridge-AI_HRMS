@@ -468,8 +468,8 @@ const isLongText = (f: SubmissionField): boolean => {
 
       <!-- Submissions tab -->
       <div v-if="activeTab === 'submissions'" class="hrms-card jrd-section">
-        <!-- Download all button — owner only, only when there are submissions -->
-        <div v-if="isOwner && submissions.length > 0" class="jrd-submissions-header">
+        <!-- Download all button — visible to any user who can view this job's submissions -->
+        <div v-if="submissions.length > 0" class="jrd-submissions-header">
           <button
             class="hrms-btn hrms-btn--sm hrms-btn--primary"
             :disabled="downloadingAll"

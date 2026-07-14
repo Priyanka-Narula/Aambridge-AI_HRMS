@@ -26,13 +26,13 @@ services:
     image: minio/minio:RELEASE.2025-01-20T14-49-07Z
     container_name: hrms-minio
     restart: "no"
-    command: server /data --console-address ":9001"
+    command: server /data --console-address ":9090"
     environment:
       MINIO_ROOT_USER: hrms
       MINIO_ROOT_PASSWORD: hrms_minio_secret
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9009:9000"
+      - "9003:9090"
     volumes:
       - minio_data:/data
     deploy:

@@ -1,4 +1,43 @@
 export type JobRequirementStatus = 'open' | 'on_hold' | 'closed' | 'filled'
+export type OwnerStatusType = 'pending_review' | 'approved' | 'rejected'
+
+export interface SubmissionField {
+  field: string
+  type: string
+  required: boolean
+}
+
+export interface CandidateSubmission {
+  id: string
+  candidate_id: string
+  candidate_name: string
+  candidate_email: string
+  job_requirement_id: string
+  job_title: string
+  client_id: string
+  client_name: string
+  submitted_by_id: string | null
+  submitted_by_name: string | null
+  submitted_at: string | null
+  current_stage: string | null
+  status: string
+  owner_status: OwnerStatusType
+  submission_data: Record<string, string> | null
+}
+
+export interface OwnerDashboardJob {
+  job_requirement_id: string
+  job_title: string
+  status: string
+  open_positions: number | null
+  submissions: CandidateSubmission[]
+}
+
+export interface OwnerDashboardClient {
+  client_id: string
+  company_name: string
+  jobs: OwnerDashboardJob[]
+}
 
 export interface JobRequirementListItem {
   id: string
@@ -22,6 +61,7 @@ export interface JobRequirementListItem {
   requirement_type?: string | null
   created_by: string
   created_at?: string | null
+  client_submission_format?: SubmissionField[] | null
 }
 
 export interface JobRequirementCreatePayload {

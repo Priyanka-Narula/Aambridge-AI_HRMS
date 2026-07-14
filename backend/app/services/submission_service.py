@@ -462,11 +462,14 @@ def generate_bulk_job_excel(
     job_req_id: uuid.UUID,
     current_user: User,
 ) -> tuple[bytes, str]:
-    """Return (excel_bytes, filename) with one row per submission for the job."""
-    if normalize_role(current_user.role.name) != ROLE_OWNER:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner only")
+    """Return (excel_bytes, filename) with one row per submission for the job.
 
+    Access: owners can download any job; recruiters can only download their assigned job.
+    """
+    role = normalize_role(current_user.role.name)
     jr = _load_job_requirement(db, job_req_id)
+    if role == ROLE_RECRUITER and jr.assigned_to != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not assigned to this job")
 
     try:
         import openpyxl
@@ -550,6 +553,140 @@ def generate_bulk_job_excel(
 
 
 # ---------------------------------------------------------------------------
+# I. Bulk download — all approved candidates for a client in one Excel sheet
+# ---------------------------------------------------------------------------
+
+def generate_bulk_approved_client_excel(
+    db: Session,
+    client_id: uuid.UUID,
+    current_user: User,
+) -> tuple[bytes, str]:
+    """Return (excel_bytes, filename) with one row per approved submission for the client.
+
+    Columns are taken from the client's submission_format template.
+    A leading 'Job Title' column is added so the owner can see which role each row belongs to.
+    """
+    if normalize_role(current_user.role.name) != ROLE_OWNER:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner only")
+
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+
+    # Collect job requirement IDs for this client as a plain Python list to
+    # avoid SQLAlchemy 2.0 subquery coercion issues with .in_()
+    jr_ids_list: list[uuid.UUID] = [
+        row[0]
+        for row in db.query(JobRequirement.id)
+        .filter(JobRequirement.client_id == client_id)
+        .all()
+    ]
+
+    if not jr_ids_list:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No jobs found for this client",
+        )
+
+    applications = (
+        db.query(CandidateApplication)
+        .filter(
+            CandidateApplication.job_requirement_id.in_(jr_ids_list),
+            CandidateApplication.owner_status == "approved",
+        )
+        .order_by(CandidateApplication.submitted_at.asc())
+        .all()
+    )
+
+    if not applications:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No approved profiles found for this client",
+        )
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="openpyxl is not installed",
+        )
+
+    # Determine columns from client's submission_format
+    fields: list[dict] = []
+    if client.submission_format:
+        try:
+            fields = json.loads(client.submission_format)
+        except (json.JSONDecodeError, TypeError):
+            fields = []
+
+    if not fields:
+        fields = [
+            {"field": "First Name"}, {"field": "Last Name"}, {"field": "Email"},
+            {"field": "Phone"}, {"field": "Current Company"},
+            {"field": "Current Designation"}, {"field": "Total Experience (Years)"},
+            {"field": "Notice Period"}, {"field": "Current CTC"},
+            {"field": "Expected CTC"}, {"field": "Visa Status"},
+            {"field": "Current Location"},
+        ]
+
+    # Load related job requirements and candidates
+    jr_ids = {a.job_requirement_id for a in applications}
+    cand_ids = {a.candidate_id for a in applications}
+
+    jr_map: dict[uuid.UUID, JobRequirement] = {}
+    for jr in db.query(JobRequirement).filter(JobRequirement.id.in_(jr_ids)).all():
+        jr_map[jr.id] = jr
+
+    cand_map: dict[uuid.UUID, Candidate] = {}
+    for c in db.query(Candidate).filter(Candidate.id.in_(cand_ids)).all():
+        cand_map[c.id] = c
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Approved Profiles"
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="4C1D95", end_color="4C1D95", fill_type="solid")
+
+    # Job Title prefix column + client template fields
+    all_headers = ["Job Title"] + [f.get("field", "") for f in fields]
+    for col_idx, header in enumerate(all_headers, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for row_idx, app in enumerate(applications, start=2):
+        jr = jr_map.get(app.job_requirement_id)
+        stored_data: dict[str, Any] = {}
+        if app.submission_data:
+            try:
+                stored_data = json.loads(app.submission_data)
+            except (json.JSONDecodeError, TypeError):
+                stored_data = {}
+
+        ws.cell(row=row_idx, column=1, value=jr.job_title if jr else "")
+
+        for col_idx, field_def in enumerate(fields, start=2):
+            label = field_def.get("field", "")
+            value = stored_data.get(label)
+            if value is not None and str(value).strip():
+                ws.cell(row=row_idx, column=col_idx, value=str(value))
+
+    for col in ws.columns:
+        max_len = max((len(str(c.value or "")) for c in col), default=10)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    safe_client = client.company_name.replace(" ", "_")
+    return buf.read(), f"{safe_client}_approved_profiles.xlsx"
+
+
+# ---------------------------------------------------------------------------
 # Serializer
 # ---------------------------------------------------------------------------
 
@@ -592,3 +729,4 @@ def serialize_submission(
         "owner_status": app.owner_status,
         "submission_data": stored_data,
     }
+

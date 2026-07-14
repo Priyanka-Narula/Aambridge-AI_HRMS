@@ -133,7 +133,7 @@ def list_submissions_route(
 def download_all_submissions_route(
     requirement_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_owner),
+    current_user: User = Depends(get_current_user),
 ):
     excel_bytes, filename = generate_bulk_job_excel(db, requirement_id, current_user)
     return Response(

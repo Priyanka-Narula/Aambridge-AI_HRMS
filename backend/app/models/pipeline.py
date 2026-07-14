@@ -5,7 +5,12 @@ from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from typing import TYPE_CHECKING
+
 from app.models.base import Base, uuid_pk
+
+if TYPE_CHECKING:
+    from app.models.user_access import User
 
 
 class PipelineStage(Base):
@@ -41,6 +46,16 @@ class CandidateApplication(Base):
     )
     applied_date: Mapped[date | None] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    submitted_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    owner_status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="pending_review"
+    )
+    submission_data: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     current_stage_rel: Mapped["PipelineStage | None"] = relationship(
         back_populates="applications"
@@ -54,6 +69,10 @@ class CandidateApplication(Base):
     )
     placement: Mapped["Placement | None"] = relationship(
         back_populates="application", uselist=False
+    )
+    submitter: Mapped["User | None"] = relationship(
+        foreign_keys=[submitted_by],
+        primaryjoin="CandidateApplication.submitted_by == User.id",
     )
 
 

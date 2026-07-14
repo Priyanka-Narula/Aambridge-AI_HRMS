@@ -77,6 +77,32 @@ export async function downloadAllSubmissions(jobRequirementId: string, filename:
   URL.revokeObjectURL(url)
 }
 
+export async function downloadApprovedClientSubmissions(
+  clientId: string,
+  filename: string,
+): Promise<void> {
+  const { data, headers } = await apiClient.get<Blob>(
+    `/api/v1/submissions/owner/download-approved/${clientId}`,
+    { responseType: 'blob' },
+  )
+  const disposition = headers['content-disposition'] ?? ''
+  const match = /filename="?([^"]+)"?/.exec(disposition)
+  const resolvedFilename = match?.[1] ?? filename
+
+  const url = URL.createObjectURL(
+    new Blob([data], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }),
+  )
+  const link = document.createElement('a')
+  link.href = url
+  link.download = resolvedFilename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 export async function fetchOwnerDashboard(): Promise<OwnerDashboardClient[]> {
   const { data } = await apiClient.get<OwnerDashboardClient[]>('/api/v1/submissions/owner/dashboard')
   return data

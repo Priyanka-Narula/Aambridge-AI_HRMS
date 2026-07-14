@@ -34,3 +34,4 @@ pydantic[email]
 huggingface_hub>=0.27.0
 gdown
 tzdata
+openpyxl

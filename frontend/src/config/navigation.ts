@@ -44,6 +44,13 @@ export const navigationItems: NavItem[] = [
     roles: ['owner', 'recruiter'],
   },
   {
+    id: 'submissions-dashboard',
+    label: 'Submissions',
+    icon: 'pipeline',
+    route: '/submissions-dashboard',
+    roles: ['owner'],
+  },
+  {
     id: 'reports',
     label: 'Reports',
     icon: 'reports',
