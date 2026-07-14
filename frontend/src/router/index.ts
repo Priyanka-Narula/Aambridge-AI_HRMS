@@ -75,10 +75,10 @@ const router = createRouter({
           meta: { title: 'Pipeline', roles: ['owner', 'recruiter'] },
         },
         {
-          path: 'recruitment',
-          name: 'recruitment',
-          component: () => import('@/views/PlaceholderView.vue'),
-          meta: { title: 'Recruitment', roles: ['owner', 'recruiter'] },
+          path: 'job-requirements',
+          name: 'job-requirements',
+          component: () => import('@/views/JobRequirementsView.vue'),
+          meta: { title: 'Job Requirements', roles: ['owner', 'recruiter'] },
         },
         {
           path: 'reports',

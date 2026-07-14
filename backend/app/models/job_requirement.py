@@ -1,12 +1,16 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, uuid_pk
+
+if TYPE_CHECKING:
+    from app.models.user_access import Client, User
 
 
 class JobRequirement(Base):
@@ -30,6 +34,9 @@ class JobRequirement(Base):
     priority: Mapped[str | None] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="open")
     requirement_type: Mapped[str | None] = mapped_column(String(50))
+    assigned_to: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
+    )
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
@@ -37,6 +44,9 @@ class JobRequirement(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
+    client: Mapped["Client"] = relationship()
+    assignee: Mapped["User | None"] = relationship(foreign_keys=[assigned_to])
+    creator: Mapped["User"] = relationship(foreign_keys=[created_by])
     skills: Mapped[list["RequirementSkill"]] = relationship(back_populates="job_requirement")
     activities: Mapped[list["RequirementActivity"]] = relationship(
         back_populates="job_requirement"
