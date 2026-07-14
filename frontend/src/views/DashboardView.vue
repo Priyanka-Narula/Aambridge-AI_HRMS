@@ -2,13 +2,16 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAttendanceStore } from '@/stores/attendance'
-import { formatOfficeTime } from '@/utils/format'
+import { formatOfficeTime, formatUaetime, OFFICE_TIMEZONE, uaeHour } from '@/utils/format'
 
 const auth = useAuthStore()
 const attendance = useAttendanceStore()
 
+const now = ref(new Date())
+const officeTz = computed(() => attendance.policy?.timezone || OFFICE_TIMEZONE)
+
 const greeting = computed(() => {
-  const hour = new Date().getHours()
+  const hour = uaeHour(now.value, officeTz.value)
   if (hour < 12) return 'Good morning'
   if (hour < 17) return 'Good afternoon'
   return 'Good evening'
@@ -21,8 +24,7 @@ const stats = [
   { label: 'Offers Extended', value: '3', trend: '1 accepted' },
 ]
 
-// ── Live clock ────────────────────────────────────────────────────────────────
-const now = ref(new Date())
+// ── Live clock (always UAE / Dubai) ───────────────────────────────────────────
 let clockTimer: ReturnType<typeof setInterval>
 
 onMounted(async () => {
@@ -36,7 +38,7 @@ onMounted(async () => {
 onUnmounted(() => clearInterval(clockTimer))
 
 const currentTime = computed(() =>
-  now.value.toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+  formatUaetime(now.value, { hour: '2-digit', minute: '2-digit', second: '2-digit' }, officeTz.value),
 )
 
 // ── Attendance helpers ────────────────────────────────────────────────────────
@@ -45,7 +47,7 @@ const checkedOut = computed(() => !!attendance.myRecord?.check_out)
 
 function formatTime(iso: string | null | undefined): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' })
+  return formatUaetime(iso, { hour: '2-digit', minute: '2-digit' }, officeTz.value)
 }
 
 async function handleCheckIn() {
@@ -98,7 +100,7 @@ const attendanceSummary = computed(() => {
       <div v-if="auth.role === 'recruiter'" class="checkin-card">
         <div class="checkin-card__header">
           <span class="checkin-card__title">Today's Attendance</span>
-          <span class="checkin-card__clock">{{ currentTime }}</span>
+          <span class="checkin-card__clock" title="UAE (Dubai) time">{{ currentTime }} GST</span>
         </div>
 
         <div v-if="attendance.policy" class="checkin-card__schedule">
@@ -161,7 +163,7 @@ const attendanceSummary = computed(() => {
     <!-- Owner: team attendance table -->
     <section v-if="auth.role === 'owner'" class="attendance-table-card" aria-label="Team attendance">
       <div class="attendance-table-card__header">
-        <span class="attendance-table-card__title">Team Attendance — Today</span>
+        <span class="attendance-table-card__title">Team Attendance — Today (UAE)</span>
         <div class="attendance-table-card__summary">
           <span class="chip chip--green">Present {{ attendanceSummary.present }}</span>
           <span class="chip chip--orange">Late {{ attendanceSummary.late }}</span>
