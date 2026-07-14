@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.routes import attendance, auth, candidates, cv, users
+from app.api.routes import attendance, auth, candidates, clients, cv, users
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.core.deps import get_current_user
@@ -330,6 +330,7 @@ def test_upload_page() -> str:
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(clients.router)
 app.include_router(attendance.router, dependencies=[Depends(get_current_user)])
 app.include_router(cv.router, dependencies=[Depends(get_current_user)])
 app.include_router(candidates.router, dependencies=[Depends(get_current_user)])

@@ -45,6 +45,12 @@ const router = createRouter({
           meta: { title: 'Recruiters', roles: ['owner'] },
         },
         {
+          path: 'clients',
+          name: 'clients',
+          component: () => import('@/views/ClientsView.vue'),
+          meta: { title: 'Clients', roles: ['owner'] },
+        },
+        {
           path: 'candidates',
           name: 'candidates',
           component: () => import('@/views/CandidatesView.vue'),
@@ -83,8 +89,8 @@ const router = createRouter({
         {
           path: 'settings',
           name: 'settings',
-          component: () => import('@/views/PlaceholderView.vue'),
-          meta: { title: 'Settings', roles: ['owner', 'recruiter'] },
+          component: () => import('@/views/SettingsView.vue'),
+          meta: { title: 'Profile', roles: ['owner', 'recruiter'] },
         },
       ],
     },

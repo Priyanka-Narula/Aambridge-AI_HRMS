@@ -37,3 +37,15 @@ export async function fetchAllToday(): Promise<RecruiterAttendanceRow[]> {
   const { data } = await apiClient.get<RecruiterAttendanceRow[]>('/api/v1/attendance/today')
   return data
 }
+
+export interface AttendancePolicy {
+  checkin_expected: string
+  checkout_expected: string
+  late_threshold: string
+  timezone: string
+}
+
+export async function fetchPolicy(): Promise<AttendancePolicy> {
+  const { data } = await apiClient.get<AttendancePolicy>('/api/v1/attendance/policy')
+  return data
+}

@@ -60,6 +60,7 @@ def clean_candidate_data(data: dict[str, Any]) -> dict[str, Any]:
         "preferred_location",
         "current_company",
         "current_designation",
+        "industry",
         "notice_period",
         "resume_url",
         "source",
@@ -77,6 +78,7 @@ def clean_candidate_data(data: dict[str, Any]) -> dict[str, Any]:
 
     cleaned["date_of_birth"] = _parse_date(data.get("date_of_birth"))
     cleaned["total_experience_years"] = _parse_decimal(data.get("total_experience_years"))
+    cleaned["uae_experience_years"] = _parse_decimal(data.get("uae_experience_years"))
     cleaned["current_ctc"] = _parse_decimal(data.get("current_ctc"))
     cleaned["expected_ctc"] = _parse_decimal(data.get("expected_ctc"))
 

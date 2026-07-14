@@ -1,13 +1,14 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import * as attendanceApi from '@/api/attendance'
-import type { AttendanceRecord, RecruiterAttendanceRow } from '@/api/attendance'
+import type { AttendancePolicy, AttendanceRecord, RecruiterAttendanceRow } from '@/api/attendance'
 
-export { type AttendanceRecord, type RecruiterAttendanceRow }
+export { type AttendancePolicy, type AttendanceRecord, type RecruiterAttendanceRow }
 
 export const useAttendanceStore = defineStore('attendance', () => {
   const myRecord = ref<AttendanceRecord | null>(null)
   const allRecords = ref<RecruiterAttendanceRow[]>([])
+  const policy = ref<AttendancePolicy | null>(null)
   const loading = ref(false)
   const allLoading = ref(false)
   const error = ref('')
@@ -50,6 +51,19 @@ export const useAttendanceStore = defineStore('attendance', () => {
     }
   }
 
+  async function fetchPolicy() {
+    try {
+      policy.value = await attendanceApi.fetchPolicy()
+    } catch {
+      policy.value = {
+        checkin_expected: '09:00',
+        checkout_expected: '18:30',
+        late_threshold: '09:15',
+        timezone: 'Asia/Dubai',
+      }
+    }
+  }
+
   async function fetchAllToday() {
     allLoading.value = true
     try {
@@ -64,12 +78,14 @@ export const useAttendanceStore = defineStore('attendance', () => {
   return {
     myRecord,
     allRecords,
+    policy,
     loading,
     allLoading,
     error,
     fetchMyToday,
     checkIn,
     checkOut,
+    fetchPolicy,
     fetchAllToday,
   }
 })

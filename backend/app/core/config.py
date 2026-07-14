@@ -32,9 +32,9 @@ class Settings(BaseSettings):
     BOOTSTRAP_OWNER_LAST_NAME: str = "Owner"
 
     OFFICE_TIMEZONE: str = "Asia/Dubai"
-    CHECKIN_EXPECTED: str = "09:30"
+    CHECKIN_EXPECTED: str = "09:00"
     CHECKOUT_EXPECTED: str = "18:30"
-    LATE_THRESHOLD: str = "10:00"
+    LATE_THRESHOLD: str = "09:15"
 
 
 settings = Settings()

@@ -88,6 +88,14 @@ function removeExperience(index: number) {
           <input v-model.number="draft.total_experience_years" class="hrms-input" type="number" step="0.1" min="0" />
         </label>
         <label class="hrms-field">
+          <span class="hrms-label">UAE experience (years)</span>
+          <input v-model.number="draft.uae_experience_years" class="hrms-input" type="number" step="0.1" min="0" />
+        </label>
+        <label class="hrms-field">
+          <span class="hrms-label">Industry</span>
+          <input v-model="draft.industry" class="hrms-input" type="text" placeholder="e.g. IT, Finance" />
+        </label>
+        <label class="hrms-field">
           <span class="hrms-label">Current company</span>
           <input v-model="draft.current_company" class="hrms-input" type="text" />
         </label>

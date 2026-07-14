@@ -39,6 +39,8 @@ export interface Candidate {
   current_location?: string | null
   preferred_location?: string | null
   total_experience_years?: number | null
+  uae_experience_years?: number | null
+  industry?: string | null
   current_company?: string | null
   current_designation?: string | null
   current_ctc?: number | null
@@ -92,6 +94,8 @@ export interface CandidateDraft {
   current_location?: string | null
   preferred_location?: string | null
   total_experience_years?: number | null
+  uae_experience_years?: number | null
+  industry?: string | null
   current_company?: string | null
   current_designation?: string | null
   current_ctc?: number | null
@@ -118,6 +122,8 @@ export interface CandidateUpdatePayload {
   current_location?: string | null
   preferred_location?: string | null
   total_experience_years?: number | null
+  uae_experience_years?: number | null
+  industry?: string | null
   current_company?: string | null
   current_designation?: string | null
   current_ctc?: number | null
@@ -168,6 +174,8 @@ export function candidateToDraft(candidate: Candidate): CandidateDraft {
     current_location: candidate.current_location,
     preferred_location: candidate.preferred_location,
     total_experience_years: candidate.total_experience_years,
+    uae_experience_years: candidate.uae_experience_years,
+    industry: candidate.industry,
     current_company: candidate.current_company,
     current_designation: candidate.current_designation,
     current_ctc: candidate.current_ctc,
@@ -214,6 +222,8 @@ export function draftToUpdatePayload(draft: CandidateDraft, createdBy?: string |
     current_location: draft.current_location,
     preferred_location: draft.preferred_location,
     total_experience_years: draft.total_experience_years,
+    uae_experience_years: draft.uae_experience_years,
+    industry: draft.industry,
     current_company: draft.current_company,
     current_designation: draft.current_designation,
     current_ctc: draft.current_ctc,

@@ -26,6 +26,7 @@ class User(Base, TimestampMixin):
     location: Mapped[str | None] = mapped_column(String(255))
     languages_spoken: Mapped[str | None] = mapped_column(String(255))
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    personal_email: Mapped[str | None] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(50))
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role_id: Mapped[uuid.UUID] = mapped_column(
@@ -78,7 +79,8 @@ class Client(Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
     contract: Mapped[str | None] = mapped_column(Text)
     payment_terms: Mapped[str | None] = mapped_column(String(255))
-    submission_format: Mapped[str | None] = mapped_column(String(255))
+    submission_format: Mapped[str | None] = mapped_column(Text)
+    portal_url: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

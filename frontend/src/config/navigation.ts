@@ -16,6 +16,13 @@ export const navigationItems: NavItem[] = [
     roles: ['owner'],
   },
   {
+    id: 'clients',
+    label: 'Clients',
+    icon: 'clients',
+    route: '/clients',
+    roles: ['owner'],
+  },
+  {
     id: 'candidates',
     label: 'Candidates',
     icon: 'candidates',
@@ -45,7 +52,7 @@ export const navigationItems: NavItem[] = [
   },
   {
     id: 'settings',
-    label: 'Settings',
+    label: 'Profile',
     icon: 'settings',
     route: '/settings',
     roles: ['owner', 'recruiter'],

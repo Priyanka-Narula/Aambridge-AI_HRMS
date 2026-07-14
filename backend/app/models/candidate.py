@@ -34,6 +34,8 @@ class Candidate(Base, TimestampMixin):
     candidate_status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
     source: Mapped[str | None] = mapped_column(String(100))
     created_by: Mapped[str | None] = mapped_column(String(255))
+    uae_experience_years: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
+    industry: Mapped[str | None] = mapped_column(String(100))
 
     skills: Mapped[list["CandidateSkill"]] = relationship(back_populates="candidate")
     education_records: Mapped[list["Education"]] = relationship(back_populates="candidate")

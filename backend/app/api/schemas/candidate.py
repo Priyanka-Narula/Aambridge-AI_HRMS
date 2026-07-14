@@ -52,6 +52,8 @@ class CandidateBase(BaseModel):
     candidate_status: str = "active"
     source: Optional[str] = None
     created_by: Optional[str] = None
+    uae_experience_years: Optional[Decimal] = None
+    industry: Optional[str] = None
 
 
 class CandidateCreate(CandidateBase):

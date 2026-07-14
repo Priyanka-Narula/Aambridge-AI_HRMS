@@ -41,6 +41,8 @@ class CandidateDraft(BaseModel):
     current_location: str | None = None
     preferred_location: str | None = None
     total_experience_years: Decimal | None = None
+    uae_experience_years: Decimal | None = None
+    industry: str | None = None
     current_company: str | None = None
     current_designation: str | None = None
     current_ctc: Decimal | None = None
