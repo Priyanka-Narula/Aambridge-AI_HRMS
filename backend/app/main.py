@@ -23,6 +23,9 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         ensure_bootstrap_owner(db)
+    except Exception:
+        logger.exception("Bootstrap owner setup failed; check DATABASE_URL / Postgres")
+        raise
     finally:
         db.close()
     yield

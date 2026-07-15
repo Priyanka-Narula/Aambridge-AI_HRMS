@@ -77,6 +77,8 @@ def get_storage() -> MinioStorage:
 def init_storage() -> None:
     try:
         get_storage().ensure_bucket()
-    except S3Error:
-        logger.exception("MinIO bucket initialization failed")
-        raise
+    except Exception:
+        # Don't block API startup if MinIO is briefly unavailable (e.g. Docker still starting).
+        logger.exception(
+            "MinIO bucket initialization failed; storage-dependent routes may not work until MinIO is up"
+        )
