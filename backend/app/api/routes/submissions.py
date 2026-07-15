@@ -23,6 +23,28 @@ from app.services.submission_service import (
 router = APIRouter(prefix="/api/v1/submissions", tags=["submissions"])
 
 
+@router.get("/owner/dashboard", response_model=list[OwnerDashboardClient])
+def owner_dashboard_route(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_owner),
+):
+    return get_owner_dashboard(db, current_user)
+
+
+@router.get("/owner/download-approved/{client_id}")
+def download_approved_client_route(
+    client_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_owner),
+):
+    excel_bytes, filename = generate_bulk_approved_client_excel(db, client_id, current_user)
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.patch("/{app_id}/approve", response_model=CandidateSubmissionResponse)
 def approve_submission_route(
     app_id: uuid.UUID,
@@ -54,25 +76,3 @@ def download_submission_route(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
-@router.get("/owner/download-approved/{client_id}")
-def download_approved_client_route(
-    client_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_owner),
-):
-    excel_bytes, filename = generate_bulk_approved_client_excel(db, client_id, current_user)
-    return Response(
-        content=excel_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@router.get("/owner/dashboard", response_model=list[OwnerDashboardClient])
-def owner_dashboard_route(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_owner),
-):
-    return get_owner_dashboard(db, current_user)

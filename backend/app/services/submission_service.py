@@ -75,6 +75,94 @@ def _get_recruiter(db: Session, user: User) -> Recruiter | None:
     return db.query(Recruiter).filter(Recruiter.user_id == user.id).first()
 
 
+_DEFAULT_SUBMISSION_FIELDS: list[dict[str, str]] = [
+    {"field": "First Name"},
+    {"field": "Last Name"},
+    {"field": "Email"},
+    {"field": "Phone"},
+    {"field": "Current Company"},
+    {"field": "Current Designation"},
+    {"field": "Total Experience (Years)"},
+    {"field": "Notice Period"},
+    {"field": "Current CTC"},
+    {"field": "Expected CTC"},
+    {"field": "Visa Status"},
+    {"field": "Current Location"},
+]
+
+# Map common template labels → Candidate model attributes (case-insensitive).
+_CANDIDATE_LABEL_ATTRS: dict[str, str] = {
+    "first name": "first_name",
+    "last name": "last_name",
+    "email": "email",
+    "phone": "phone",
+    "mobile": "phone",
+    "current company": "current_company",
+    "company": "current_company",
+    "current designation": "current_designation",
+    "designation": "current_designation",
+    "total experience (years)": "total_experience_years",
+    "total experience": "total_experience_years",
+    "experience": "total_experience_years",
+    "notice period": "notice_period",
+    "current ctc": "current_ctc",
+    "expected ctc": "expected_ctc",
+    "visa status": "visa_status",
+    "current location": "current_location",
+    "location": "current_location",
+    "nationality": "nationality",
+    "linkedin": "linkedin_url",
+    "linkedin url": "linkedin_url",
+}
+
+
+def _parse_submission_fields(raw: str | None) -> list[dict]:
+    if not raw:
+        return list(_DEFAULT_SUBMISSION_FIELDS)
+    try:
+        fields = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return list(_DEFAULT_SUBMISSION_FIELDS)
+    return fields if fields else list(_DEFAULT_SUBMISSION_FIELDS)
+
+
+def _parse_stored_submission_data(raw: str | None) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _candidate_attr_value(candidate: Candidate | None, label: str) -> str | None:
+    if not candidate or not label:
+        return None
+    attr = _CANDIDATE_LABEL_ATTRS.get(label.strip().lower())
+    if not attr:
+        return None
+    value = getattr(candidate, attr, None)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _cell_value(stored_data: dict[str, Any], label: str, candidate: Candidate | None) -> str | None:
+    """Prefer recruiter-filled submission_data; fall back to Candidate fields."""
+    if label in stored_data:
+        raw = stored_data.get(label)
+        if raw is not None and str(raw).strip():
+            return str(raw).strip()
+    # Case-insensitive key match in stored data
+    label_l = label.strip().lower()
+    for key, raw in stored_data.items():
+        if str(key).strip().lower() == label_l and raw is not None and str(raw).strip():
+            return str(raw).strip()
+    return _candidate_attr_value(candidate, label)
+
+
 # ---------------------------------------------------------------------------
 # A. Mandatory fields check against submission_data
 # ---------------------------------------------------------------------------
@@ -391,32 +479,8 @@ def generate_submission_excel(
             detail="openpyxl is not installed",
         )
 
-    # Parse submission_data stored on the application
-    stored_data: dict[str, Any] = {}
-    if app.submission_data:
-        try:
-            stored_data = json.loads(app.submission_data)
-        except (json.JSONDecodeError, TypeError):
-            stored_data = {}
-
-    # Determine columns from client's submission_format
-    fields: list[dict] = []
-    if jr.client and jr.client.submission_format:
-        try:
-            fields = json.loads(jr.client.submission_format)
-        except (json.JSONDecodeError, TypeError):
-            fields = []
-
-    # Fall back to a sensible default column set
-    if not fields:
-        fields = [
-            {"field": "First Name"}, {"field": "Last Name"}, {"field": "Email"},
-            {"field": "Phone"}, {"field": "Current Company"},
-            {"field": "Current Designation"}, {"field": "Total Experience (Years)"},
-            {"field": "Notice Period"}, {"field": "Current CTC"},
-            {"field": "Expected CTC"}, {"field": "Visa Status"},
-            {"field": "Current Location"},
-        ]
+    stored_data = _parse_stored_submission_data(app.submission_data)
+    fields = _parse_submission_fields(jr.client.submission_format if jr.client else None)
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -431,12 +495,12 @@ def generate_submission_excel(
         cell.font = header_font
         cell.fill = header_fill
 
-    # Data row: prefer stored_data values (filled by recruiter during submission)
+    # Prefer recruiter-filled submission_data; fall back to Candidate record
     for col_idx, field_def in enumerate(fields, start=1):
         label = field_def.get("field", "")
-        value = stored_data.get(label)
-        if value is not None and str(value).strip():
-            ws.cell(row=2, column=col_idx, value=str(value))
+        value = _cell_value(stored_data, label, candidate)
+        if value is not None:
+            ws.cell(row=2, column=col_idx, value=value)
 
     for col in ws.columns:
         max_len = max((len(str(c.value or "")) for c in col), default=10)
@@ -480,23 +544,7 @@ def generate_bulk_job_excel(
             detail="openpyxl is not installed",
         )
 
-    # Determine columns from client's submission_format
-    fields: list[dict] = []
-    if jr.client and jr.client.submission_format:
-        try:
-            fields = json.loads(jr.client.submission_format)
-        except (json.JSONDecodeError, TypeError):
-            fields = []
-
-    if not fields:
-        fields = [
-            {"field": "First Name"}, {"field": "Last Name"}, {"field": "Email"},
-            {"field": "Phone"}, {"field": "Current Company"},
-            {"field": "Current Designation"}, {"field": "Total Experience (Years)"},
-            {"field": "Notice Period"}, {"field": "Current CTC"},
-            {"field": "Expected CTC"}, {"field": "Visa Status"},
-            {"field": "Current Location"},
-        ]
+    fields = _parse_submission_fields(jr.client.submission_format if jr.client else None)
 
     # Load all submissions for this job
     applications = (
@@ -526,18 +574,14 @@ def generate_bulk_job_excel(
         cell.fill = header_fill
 
     for row_idx, app in enumerate(applications, start=2):
-        stored_data: dict[str, Any] = {}
-        if app.submission_data:
-            try:
-                stored_data = json.loads(app.submission_data)
-            except (json.JSONDecodeError, TypeError):
-                stored_data = {}
+        stored_data = _parse_stored_submission_data(app.submission_data)
+        candidate = cand_map.get(app.candidate_id)
 
         for col_idx, field_def in enumerate(fields, start=1):
             label = field_def.get("field", "")
-            value = stored_data.get(label)
-            if value is not None and str(value).strip():
-                ws.cell(row=row_idx, column=col_idx, value=str(value))
+            value = _cell_value(stored_data, label, candidate)
+            if value is not None:
+                ws.cell(row=row_idx, column=col_idx, value=value)
 
     for col in ws.columns:
         max_len = max((len(str(c.value or "")) for c in col), default=10)
@@ -613,23 +657,7 @@ def generate_bulk_approved_client_excel(
             detail="openpyxl is not installed",
         )
 
-    # Determine columns from client's submission_format
-    fields: list[dict] = []
-    if client.submission_format:
-        try:
-            fields = json.loads(client.submission_format)
-        except (json.JSONDecodeError, TypeError):
-            fields = []
-
-    if not fields:
-        fields = [
-            {"field": "First Name"}, {"field": "Last Name"}, {"field": "Email"},
-            {"field": "Phone"}, {"field": "Current Company"},
-            {"field": "Current Designation"}, {"field": "Total Experience (Years)"},
-            {"field": "Notice Period"}, {"field": "Current CTC"},
-            {"field": "Expected CTC"}, {"field": "Visa Status"},
-            {"field": "Current Location"},
-        ]
+    fields = _parse_submission_fields(client.submission_format)
 
     # Load related job requirements and candidates
     jr_ids = {a.job_requirement_id for a in applications}
@@ -659,20 +687,16 @@ def generate_bulk_approved_client_excel(
 
     for row_idx, app in enumerate(applications, start=2):
         jr = jr_map.get(app.job_requirement_id)
-        stored_data: dict[str, Any] = {}
-        if app.submission_data:
-            try:
-                stored_data = json.loads(app.submission_data)
-            except (json.JSONDecodeError, TypeError):
-                stored_data = {}
+        stored_data = _parse_stored_submission_data(app.submission_data)
+        candidate = cand_map.get(app.candidate_id)
 
         ws.cell(row=row_idx, column=1, value=jr.job_title if jr else "")
 
         for col_idx, field_def in enumerate(fields, start=2):
             label = field_def.get("field", "")
-            value = stored_data.get(label)
-            if value is not None and str(value).strip():
-                ws.cell(row=row_idx, column=col_idx, value=str(value))
+            value = _cell_value(stored_data, label, candidate)
+            if value is not None:
+                ws.cell(row=row_idx, column=col_idx, value=value)
 
     for col in ws.columns:
         max_len = max((len(str(c.value or "")) for c in col), default=10)
