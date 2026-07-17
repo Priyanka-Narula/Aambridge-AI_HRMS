@@ -31,10 +31,44 @@
 - Run `alembic upgrade head`
 - If two branches added migrations, a merge migration may be required (resolve in Alembic)
 
+### Docker / compose hangs (Windows)
+
+If `docker compose down` or `docker compose up` freezes with no output:
+
+1. Press **Ctrl+C** in the stuck terminal.
+2. **Quit Docker Desktop** completely (tray icon → Quit), wait 10 seconds, start it again.
+3. From the project root, run:
+
+```powershell
+.\scripts\docker-recover.ps1
+```
+
+This force-removes HRMS containers (including old orphans `hrms-backend`, `hrms-frontend`) and starts a clean Postgres + MinIO stack.
+
+If it still hangs, open **Task Manager** and end any stuck `com.docker.*` or `docker` processes, then restart Docker Desktop.
+
 ### MinIO upload/download issues
 
-- Confirm MinIO is running
-- Open MinIO console and verify bucket exists
+- Confirm MinIO is running: `docker compose ps`
+- Check MinIO health: `http://127.0.0.1:9000/minio/health/live` should return `200`
+- Check API health: `http://127.0.0.1:8000/health/storage`
+- Confirm `MINIO_ENDPOINT` in `backend/.env` is `127.0.0.1:9000` (matches `docker-compose.yml` port `9000:9000`)
+- If `minio-init` exited with an error, recreate the stack:
+
+```powershell
+docker compose down --remove-orphans
+docker compose up -d
+docker compose logs minio-init
+```
+
+- MinIO console: `http://localhost:9001` (login: `hrms` / `hrms_minio_secret`)
+- If the container shows "Up" but health fails, force-recreate MinIO:
+
+```powershell
+docker compose up -d --force-recreate minio minio-init
+```
+
+- If a resume returns 503, MinIO was down when requested — restart Docker services and retry. Re-upload the CV if the object was never stored.
 
 ### Frontend “Unauthorized” redirect issues
 

@@ -82,7 +82,7 @@ Local URLs:
 - Frontend: `http://localhost:5173`
 - Backend API: `http://127.0.0.1:8000`
 - API Docs (Swagger): `http://127.0.0.1:8000/docs`
-- MinIO Console: `http://localhost:9001` (login: `hrms` / `hrms_minio_secret`)
+- MinIO Console: `http://localhost:9001` (login: `hrms` / `hrms_minio_secret`) — API on port `9000`
 
 When done:
 
