@@ -20,7 +20,8 @@ def parse_cv_text(raw_text: str, storage_uri: str, source: str) -> tuple[dict[st
     if settings.HF_API_TOKEN:
         try:
             parsed = parse_candidate_with_llm(raw_text, storage_uri, source)
-            return parsed, "mistral_hf"
+            model_used = str(parsed.pop("_llm_model", settings.HF_MODEL) or settings.HF_MODEL)
+            return parsed, f"hf:{model_used}"
         except Exception as exc:
             logger.warning("LLM parsing failed, falling back to regex: %s", exc)
 

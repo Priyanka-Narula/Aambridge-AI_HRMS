@@ -1,10 +1,12 @@
 ﻿<script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import CandidateVerifyForm from '@/components/candidates/CandidateVerifyForm.vue'
+import ResumePreview from '@/components/candidates/ResumePreview.vue'
 import {
   deleteCandidate,
   downloadCandidateResume,
   fetchCandidate,
+  fetchCandidateResumeBlob,
   fetchCandidates,
   updateCandidate,
 } from '@/api/candidates'
@@ -33,7 +35,60 @@ const editDraft = ref<CandidateDraft | null>(null)
 const saving = ref(false)
 const deleting = ref(false)
 const downloadingResume = ref(false)
+const editResumeUrl = ref<string | null>(null)
+const editResumeLoading = ref(false)
+const editResumeError = ref<string | null>(null)
 
+function revokeEditResumeUrl() {
+  if (editResumeUrl.value) {
+    URL.revokeObjectURL(editResumeUrl.value)
+    editResumeUrl.value = null
+  }
+}
+
+async function loadEditResume(candidate: Candidate) {
+  revokeEditResumeUrl()
+  editResumeError.value = null
+  if (!candidate.resume_url) {
+    editResumeLoading.value = false
+    return
+  }
+  editResumeLoading.value = true
+  try {
+    const blob = await fetchCandidateResumeBlob(candidate.id)
+    editResumeUrl.value = URL.createObjectURL(
+      new Blob([blob], { type: 'application/pdf' }),
+    )
+  } catch (err) {
+    editResumeError.value = err instanceof Error ? err.message : 'Failed to load resume preview'
+  } finally {
+    editResumeLoading.value = false
+  }
+}
+
+function openEdit() {
+  if (!selected.value) return
+  editDraft.value = candidateToDraft(selected.value)
+  showEditModal.value = true
+  void loadEditResume(selected.value)
+}
+
+function closeEdit() {
+  showEditModal.value = false
+  editDraft.value = null
+  revokeEditResumeUrl()
+  editResumeError.value = null
+}
+
+watch(showEditModal, (open) => {
+  if (!open) {
+    editDraft.value = null
+    revokeEditResumeUrl()
+    editResumeError.value = null
+  }
+})
+
+onBeforeUnmount(revokeEditResumeUrl)
 
 async function loadCandidates() {
   loading.value = true
@@ -105,21 +160,6 @@ async function selectCandidate(c: Candidate) {
 const closePanel = () => {
   selected.value = null
 }
-
-function openEdit() {
-  if (!selected.value) return
-  editDraft.value = candidateToDraft(selected.value)
-  showEditModal.value = true
-}
-
-function closeEdit() {
-  showEditModal.value = false
-  editDraft.value = null
-}
-
-watch(showEditModal, (open) => {
-  if (!open) editDraft.value = null
-})
 
 async function saveEdit() {
   if (!selected.value || !editDraft.value) return
@@ -570,8 +610,21 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
     </Transition>
 
     <!-- Edit modal -->
-    <HrmsModal v-model="showEditModal" title="Edit Candidate" size="lg">
-      <CandidateVerifyForm v-if="editDraft" v-model="editDraft" />
+    <HrmsModal v-model="showEditModal" title="Edit Candidate" size="xl">
+      <div v-if="editDraft" class="candidates-edit-layout">
+        <div class="candidates-edit-layout__form">
+          <CandidateVerifyForm v-model="editDraft" />
+        </div>
+        <aside class="candidates-edit-layout__preview">
+          <ResumePreview
+            :src="editResumeUrl"
+            :loading="editResumeLoading"
+            :error="editResumeError"
+            :filename="selected ? `${selected.first_name}_${selected.last_name}_resume.pdf` : null"
+            height="min(60vh, 640px)"
+          />
+        </aside>
+      </div>
       <template #footer>
         <button type="button" class="hrms-btn" @click="closeEdit">Cancel</button>
         <button type="button" class="hrms-btn hrms-btn--primary" :disabled="saving" @click="saveEdit">
@@ -584,6 +637,19 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
 </template>
 
 <style scoped>
+.candidates-edit-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .candidates-edit-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .panel-enter-active,
 .panel-leave-active {
   transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s;

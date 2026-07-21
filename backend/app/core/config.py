@@ -19,8 +19,17 @@ class Settings(BaseSettings):
     GOOGLE_DRIVE_SYNC_DIR: str | None = None
 
     HF_API_TOKEN: str | None = None
-    HF_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    # Default to a currently available Inference Providers chat model.
+    # meta-llama/Meta-Llama-3-8B-Instruct is no longer supported for many accounts.
+    HF_MODEL: str = "mistralai/Mistral-7B-Instruct-v0.3"
+    HF_MODEL_FALLBACKS: str = (
+        "mistralai/Mistral-Nemo-Instruct-2407,"
+        "HuggingFaceH4/zephyr-7b-beta,"
+        "Qwen/Qwen2.5-7B-Instruct"
+    )
+    HF_PROVIDER: str = "auto"
     HF_MAX_TOKENS: int = 2048
+    HF_TIMEOUT_SECONDS: float = 120.0
 
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"

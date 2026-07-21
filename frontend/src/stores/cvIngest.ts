@@ -5,9 +5,16 @@ import type { CandidateDraft, CvUploadResponse } from '@/types/candidate'
 export const useCvIngestStore = defineStore('cvIngest', () => {
   const uploadResult = ref<CvUploadResponse | null>(null)
   const draft = ref<CandidateDraft | null>(null)
+  const sourceFile = ref<File | null>(null)
+  const resumePreviewUrl = ref<string | null>(null)
 
-  function setFromUpload(result: CvUploadResponse) {
+  function setFromUpload(result: CvUploadResponse, file?: File | null) {
+    clearPreviewUrl()
     uploadResult.value = result
+    sourceFile.value = file ?? null
+    if (file) {
+      resumePreviewUrl.value = URL.createObjectURL(file)
+    }
     const preview = result.candidate_preview
     draft.value = {
       ...structuredClone(preview),
@@ -17,10 +24,26 @@ export const useCvIngestStore = defineStore('cvIngest', () => {
     }
   }
 
-  function clear() {
-    uploadResult.value = null
-    draft.value = null
+  function clearPreviewUrl() {
+    if (resumePreviewUrl.value) {
+      URL.revokeObjectURL(resumePreviewUrl.value)
+      resumePreviewUrl.value = null
+    }
   }
 
-  return { uploadResult, draft, setFromUpload, clear }
+  function clear() {
+    clearPreviewUrl()
+    uploadResult.value = null
+    draft.value = null
+    sourceFile.value = null
+  }
+
+  return {
+    uploadResult,
+    draft,
+    sourceFile,
+    resumePreviewUrl,
+    setFromUpload,
+    clear,
+  }
 })
