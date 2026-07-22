@@ -25,6 +25,36 @@
 - Confirm Postgres container is up: `docker compose ps`
 - Confirm `DATABASE_URL` matches `docker-compose.yml` port mapping (host port is `5433`)
 
+### pgAdmin cannot see the HRMS database
+
+Docker Postgres is **not** on the default port `5432`. Use these settings when registering a server in pgAdmin (desktop or `http://localhost:5050` after `docker compose up -d`):
+
+| Field | Value |
+| --- | --- |
+| Host | `localhost` (desktop pgAdmin) or `postgres` (pgAdmin container) |
+| Port | `5433` (desktop) or `5432` (pgAdmin container) |
+| Maintenance database | `hrms` |
+| Username | `hrms` |
+| Password | `hrms` |
+
+After a fresh Postgres volume, run migrations before starting the API:
+
+```powershell
+cd backend
+.\venv\Scripts\alembic.exe upgrade head
+```
+
+Without migrations you will see an empty `hrms` database or API errors like `relation "roles" does not exist`.
+
+To reset the database completely:
+
+```powershell
+docker compose down -v
+docker compose up -d
+cd backend
+.\venv\Scripts\alembic.exe upgrade head
+```
+
 ### Migration errors
 
 - Ensure venv is activated

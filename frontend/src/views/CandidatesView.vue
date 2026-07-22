@@ -35,35 +35,71 @@ const editDraft = ref<CandidateDraft | null>(null)
 const saving = ref(false)
 const deleting = ref(false)
 const downloadingResume = ref(false)
+const showResumePreview = ref(false)
+const previewResumeUrl = ref<string | null>(null)
+const previewResumeLoading = ref(false)
+const previewResumeError = ref<string | null>(null)
 const editResumeUrl = ref<string | null>(null)
 const editResumeLoading = ref(false)
 const editResumeError = ref<string | null>(null)
 
+function revokeObjectUrl(url: { value: string | null }) {
+  if (url.value) {
+    URL.revokeObjectURL(url.value)
+    url.value = null
+  }
+}
+
 function revokeEditResumeUrl() {
-  if (editResumeUrl.value) {
-    URL.revokeObjectURL(editResumeUrl.value)
-    editResumeUrl.value = null
+  revokeObjectUrl(editResumeUrl)
+}
+
+function revokePreviewResumeUrl() {
+  revokeObjectUrl(previewResumeUrl)
+}
+
+async function loadResumeBlobUrl(
+  candidate: Candidate,
+  target: { value: string | null },
+  loading: { value: boolean },
+  errorRef: { value: string | null },
+) {
+  revokeObjectUrl(target)
+  errorRef.value = null
+  if (!candidate.resume_url) {
+    loading.value = false
+    return
+  }
+  loading.value = true
+  try {
+    const blob = await fetchCandidateResumeBlob(candidate.id)
+    target.value = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
+  } catch (err) {
+    errorRef.value = err instanceof Error ? err.message : 'Failed to load resume preview'
+  } finally {
+    loading.value = false
   }
 }
 
 async function loadEditResume(candidate: Candidate) {
-  revokeEditResumeUrl()
-  editResumeError.value = null
-  if (!candidate.resume_url) {
-    editResumeLoading.value = false
-    return
-  }
-  editResumeLoading.value = true
-  try {
-    const blob = await fetchCandidateResumeBlob(candidate.id)
-    editResumeUrl.value = URL.createObjectURL(
-      new Blob([blob], { type: 'application/pdf' }),
-    )
-  } catch (err) {
-    editResumeError.value = err instanceof Error ? err.message : 'Failed to load resume preview'
-  } finally {
-    editResumeLoading.value = false
-  }
+  await loadResumeBlobUrl(candidate, editResumeUrl, editResumeLoading, editResumeError)
+}
+
+async function openResumePreview() {
+  if (!selected.value?.resume_url) return
+  showResumePreview.value = true
+  await loadResumeBlobUrl(
+    selected.value,
+    previewResumeUrl,
+    previewResumeLoading,
+    previewResumeError,
+  )
+}
+
+function closeResumePreview() {
+  showResumePreview.value = false
+  revokePreviewResumeUrl()
+  previewResumeError.value = null
 }
 
 function openEdit() {
@@ -88,7 +124,17 @@ watch(showEditModal, (open) => {
   }
 })
 
-onBeforeUnmount(revokeEditResumeUrl)
+watch(showResumePreview, (open) => {
+  if (!open) {
+    revokePreviewResumeUrl()
+    previewResumeError.value = null
+  }
+})
+
+onBeforeUnmount(() => {
+  revokeEditResumeUrl()
+  revokePreviewResumeUrl()
+})
 
 async function loadCandidates() {
   loading.value = true
@@ -401,13 +447,13 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
               v-if="selected.resume_url"
               type="button"
               class="hrms-btn hrms-btn--sm"
-              :disabled="downloadingResume"
-              @click="handleDownloadResume"
+              @click="openResumePreview"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M7 1v8M4 6l3 3 3-3M2 11h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M1.5 7s2-3.5 5.5-3.5S12.5 7 12.5 7s-2 3.5-5.5 3.5S1.5 7 1.5 7z" stroke="currentColor" stroke-width="1.3"/>
+                <circle cx="7" cy="7" r="1.5" stroke="currentColor" stroke-width="1.3"/>
               </svg>
-              {{ downloadingResume ? 'Downloading...' : 'Resume' }}
+              Resume
             </button>
             <a v-if="selected.linkedin_url" :href="selected.linkedin_url" target="_blank" class="hrms-btn hrms-btn--sm">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -608,6 +654,35 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
         </div>
       </div>
     </Transition>
+
+    <!-- Resume preview (before download) -->
+    <HrmsModal
+      v-model="showResumePreview"
+      :title="selected ? `Resume — ${selected.first_name} ${selected.last_name}` : 'Resume preview'"
+      size="xl"
+    >
+      <ResumePreview
+        :src="previewResumeUrl"
+        :loading="previewResumeLoading"
+        :error="previewResumeError"
+        :filename="selected ? `${selected.first_name}_${selected.last_name}_resume.pdf` : null"
+        height="min(70vh, 760px)"
+      />
+      <template #footer>
+        <button type="button" class="hrms-btn" @click="closeResumePreview">Close</button>
+        <button
+          type="button"
+          class="hrms-btn hrms-btn--primary"
+          :disabled="downloadingResume || previewResumeLoading || !!previewResumeError || !previewResumeUrl"
+          @click="handleDownloadResume"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M7 1v8M4 6l3 3 3-3M2 11h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          {{ downloadingResume ? 'Downloading...' : 'Download' }}
+        </button>
+      </template>
+    </HrmsModal>
 
     <!-- Edit modal -->
     <HrmsModal v-model="showEditModal" title="Edit Candidate" size="xl">

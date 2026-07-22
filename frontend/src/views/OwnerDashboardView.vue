@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { downloadCandidateResume, fetchCandidate } from '@/api/candidates'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  downloadCandidateResume,
+  fetchCandidate,
+  fetchCandidateResumeBlob,
+} from '@/api/candidates'
 import {
   approveSubmission,
   downloadApprovedClientSubmissions,
   downloadSubmission,
   fetchOwnerDashboard,
 } from '@/api/submissions'
+import ResumePreview from '@/components/candidates/ResumePreview.vue'
 import HrmsAlert from '@/components/ui/HrmsAlert.vue'
+import HrmsModal from '@/components/ui/HrmsModal.vue'
 import type { Candidate } from '@/types/candidate'
 import type {
   CandidateSubmission,
@@ -42,6 +48,51 @@ const candidateDetail = ref<Candidate | null>(null)
 const loadingCandidate = ref(false)
 const detailTab = ref<DetailTab>('overview')
 const downloadingResume = ref(false)
+const showResumePreview = ref(false)
+const previewResumeUrl = ref<string | null>(null)
+const previewResumeLoading = ref(false)
+const previewResumeError = ref<string | null>(null)
+
+function revokePreviewResumeUrl() {
+  if (previewResumeUrl.value) {
+    URL.revokeObjectURL(previewResumeUrl.value)
+    previewResumeUrl.value = null
+  }
+}
+
+async function openResumePreview() {
+  if (!candidateDetail.value?.resume_url) return
+  showResumePreview.value = true
+  revokePreviewResumeUrl()
+  previewResumeError.value = null
+  previewResumeLoading.value = true
+  try {
+    const blob = await fetchCandidateResumeBlob(candidateDetail.value.id)
+    previewResumeUrl.value = URL.createObjectURL(
+      new Blob([blob], { type: 'application/pdf' }),
+    )
+  } catch (err) {
+    previewResumeError.value =
+      err instanceof Error ? err.message : 'Failed to load resume preview'
+  } finally {
+    previewResumeLoading.value = false
+  }
+}
+
+function closeResumePreview() {
+  showResumePreview.value = false
+  revokePreviewResumeUrl()
+  previewResumeError.value = null
+}
+
+watch(showResumePreview, (open) => {
+  if (!open) {
+    revokePreviewResumeUrl()
+    previewResumeError.value = null
+  }
+})
+
+onBeforeUnmount(revokePreviewResumeUrl)
 
 const statusMeta: Record<string, { label: string; color: string }> = {
   active: { label: 'Active', color: '#22c55e' },
@@ -444,10 +495,9 @@ const formatExpDate = (d: string | null | undefined) => {
                   v-if="candidateDetail.resume_url"
                   type="button"
                   class="hrms-btn hrms-btn--sm"
-                  :disabled="downloadingResume"
-                  @click="handleDownloadResume"
+                  @click="openResumePreview"
                 >
-                  {{ downloadingResume ? 'Downloading…' : 'Resume' }}
+                  Resume
                 </button>
                 <a
                   v-if="candidateDetail.linkedin_url"
@@ -869,6 +919,44 @@ const formatExpDate = (d: string | null | undefined) => {
         </template>
       </div>
     </Transition>
+
+    <HrmsModal
+      v-model="showResumePreview"
+      :title="
+        candidateDetail
+          ? `Resume — ${candidateDetail.first_name} ${candidateDetail.last_name}`
+          : 'Resume preview'
+      "
+      size="xl"
+    >
+      <ResumePreview
+        :src="previewResumeUrl"
+        :loading="previewResumeLoading"
+        :error="previewResumeError"
+        :filename="
+          candidateDetail
+            ? `${candidateDetail.first_name}_${candidateDetail.last_name}_resume.pdf`
+            : null
+        "
+        height="min(70vh, 760px)"
+      />
+      <template #footer>
+        <button type="button" class="hrms-btn" @click="closeResumePreview">Close</button>
+        <button
+          type="button"
+          class="hrms-btn hrms-btn--primary"
+          :disabled="
+            downloadingResume ||
+            previewResumeLoading ||
+            !!previewResumeError ||
+            !previewResumeUrl
+          "
+          @click="handleDownloadResume"
+        >
+          {{ downloadingResume ? 'Downloading…' : 'Download' }}
+        </button>
+      </template>
+    </HrmsModal>
   </div>
 </template>
 

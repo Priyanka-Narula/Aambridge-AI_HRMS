@@ -32,6 +32,22 @@ services:
     volumes:
       - minio_data:/data
 
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: hrms-pgadmin
+    restart: "no"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   minio-init:
     image: minio/mc:latest
     container_name: hrms-minio-init
@@ -56,3 +72,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  pgadmin_data:

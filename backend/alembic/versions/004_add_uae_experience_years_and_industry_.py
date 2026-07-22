@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 
 # revision identifiers, used by Alembic.
@@ -19,14 +20,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "candidates",
-        sa.Column("uae_experience_years", sa.Numeric(4, 2), nullable=True),
-    )
-    op.add_column(
-        "candidates",
-        sa.Column("industry", sa.String(length=100), nullable=True),
-    )
+    # Skipped when columns already exist via 001 create_all with current models.
+    cols = {c["name"] for c in inspect(op.get_bind()).get_columns("candidates")}
+    if "uae_experience_years" not in cols:
+        op.add_column(
+            "candidates",
+            sa.Column("uae_experience_years", sa.Numeric(4, 2), nullable=True),
+        )
+    if "industry" not in cols:
+        op.add_column(
+            "candidates",
+            sa.Column("industry", sa.String(length=100), nullable=True),
+        )
 
 
 def downgrade() -> None:
