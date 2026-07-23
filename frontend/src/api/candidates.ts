@@ -26,18 +26,30 @@ export async function deleteCandidate(id: string): Promise<void> {
   await apiClient.delete(`/api/v1/candidates/${id}`)
 }
 
+export async function fetchCandidateResumeBlob(candidateId: string): Promise<Blob> {
+  const { data } = await apiClient.get<Blob>(`/api/v1/candidates/${candidateId}/resume`, {
+    responseType: 'blob',
+  })
+  if (!(data instanceof Blob) || data.size === 0) {
+    throw new Error('Resume file is empty')
+  }
+  if (data.type.includes('application/json')) {
+    const text = await data.text()
+    let message = 'Failed to load resume'
+    try {
+      const parsed = JSON.parse(text) as { detail?: string }
+      if (typeof parsed.detail === 'string') message = parsed.detail
+    } catch {
+      /* keep default */
+    }
+    throw new Error(message)
+  }
+  return data
+}
+
 export async function downloadCandidateResume(candidate: Candidate): Promise<void> {
-  const { data, headers } = await apiClient.get<Blob>(
-    `/api/v1/candidates/${candidate.id}/resume`,
-    { responseType: 'blob' },
-  )
-
-  const disposition = headers['content-disposition'] ?? ''
-  const match = /filename="?([^"]+)"?/.exec(disposition)
-  const filename =
-    match?.[1] ??
-    `${candidate.first_name}_${candidate.last_name}_resume.pdf`.replace(/\s+/g, '_')
-
+  const data = await fetchCandidateResumeBlob(candidate.id)
+  const filename = `${candidate.first_name}_${candidate.last_name}_resume.pdf`.replace(/\s+/g, '_')
   const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }))
   const link = document.createElement('a')
   link.href = url

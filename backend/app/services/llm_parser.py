@@ -11,6 +11,15 @@ logger = logging.getLogger(__name__)
 
 MAX_CV_CHARS = 14_000
 
+# Prefer currently available Inference Providers chat models.
+# Meta-Llama-3-8B-Instruct is no longer served for many HF accounts.
+DEFAULT_MODEL_CANDIDATES = (
+    "mistralai/Mistral-7B-Instruct-v0.3",
+    "mistralai/Mistral-Nemo-Instruct-2407",
+    "HuggingFaceH4/zephyr-7b-beta",
+    "Qwen/Qwen2.5-7B-Instruct",
+)
+
 EXTRACTION_SCHEMA = """{
   "first_name": "string (required)",
   "last_name": "string (required)",
@@ -70,36 +79,122 @@ def _extract_json_block(text: str) -> dict[str, Any]:
     return json.loads(text)
 
 
+def _message_content(message: Any) -> str:
+    if message is None:
+        return ""
+    if isinstance(message, dict):
+        content = message.get("content")
+    else:
+        content = getattr(message, "content", None)
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                parts.append(str(part.get("text") or ""))
+            elif isinstance(part, str):
+                parts.append(part)
+            else:
+                text = getattr(part, "text", None)
+                if text:
+                    parts.append(str(text))
+        return "".join(parts).strip()
+    return str(content or "").strip()
+
+
+def _is_model_unavailable(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return any(
+        token in text
+        for token in (
+            "model_not_supported",
+            "not supported by any provider",
+            "model is not supported",
+            "does not exist",
+            "404",
+            "not found",
+            "no provider",
+        )
+    )
+
+
+def _model_candidates() -> list[str]:
+    primary = (settings.HF_MODEL or "").strip()
+    extras = [
+        m.strip()
+        for m in (settings.HF_MODEL_FALLBACKS or "").split(",")
+        if m.strip()
+    ]
+    ordered: list[str] = []
+    for model in [primary, *extras, *DEFAULT_MODEL_CANDIDATES]:
+        if model and model not in ordered:
+            ordered.append(model)
+    return ordered
+
+
+def _create_client() -> InferenceClient:
+    kwargs: dict[str, Any] = {
+        "token": settings.HF_API_TOKEN,
+        "timeout": settings.HF_TIMEOUT_SECONDS,
+    }
+    provider = (settings.HF_PROVIDER or "").strip()
+    if provider:
+        kwargs["provider"] = provider
+    return InferenceClient(**kwargs)
+
 
 def parse_candidate_with_llm(raw_text: str, storage_uri: str, source: str) -> dict[str, Any]:
     if not settings.HF_API_TOKEN:
         raise RuntimeError("HF_API_TOKEN is not configured")
 
-    client = InferenceClient(token=settings.HF_API_TOKEN)
-
-    # Build chat prompt/messages
+    client = _create_client()
     system = "You are a helpful assistant that extracts structured JSON from a CV. Only output JSON."
     user = _build_prompt(raw_text)
 
-    response = client.chat.completions.create(
-        model=settings.HF_MODEL,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        max_tokens=settings.HF_MAX_TOKENS,
-        temperature=0.1,
-    )
+    last_error: Exception | None = None
+    used_model: str | None = None
+    content = ""
 
-    # Get the assistant reply
-    content = response.choices[0].message["content"]
+    for model in _model_candidates():
+        try:
+            logger.info("Calling HF chat model: %s", model)
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                max_tokens=settings.HF_MAX_TOKENS,
+                temperature=0.1,
+            )
+            content = _message_content(response.choices[0].message)
+            if not content:
+                raise RuntimeError(f"Empty response from LLM model {model}")
+            used_model = model
+            break
+        except Exception as exc:
+            last_error = exc
+            if _is_model_unavailable(exc):
+                logger.warning("HF model unavailable (%s): %s", model, exc)
+                continue
+            raise RuntimeError(f"HF LLM call failed for model {model}: {exc}") from exc
 
-    if not content:
-        raise RuntimeError("Empty response from LLM")
+    if not used_model or not content:
+        raise RuntimeError(
+            "No supported Hugging Face chat model is available for this token. "
+            f"Tried: {', '.join(_model_candidates())}. Last error: {last_error}"
+        )
 
-    parsed = _extract_json_block(content)
+    try:
+        parsed = _extract_json_block(content)
+    except json.JSONDecodeError as exc:
+        logger.error("LLM returned non-JSON content from %s: %s", used_model, content[:500])
+        raise RuntimeError(f"LLM returned invalid JSON from {used_model}") from exc
+
+    if not isinstance(parsed, dict):
+        raise RuntimeError("LLM JSON payload must be an object")
+
     parsed["resume_url"] = storage_uri
     parsed["source"] = source
     parsed["candidate_status"] = "pending_approval"
-
+    parsed["_llm_model"] = used_model
     return parsed

@@ -2,6 +2,7 @@
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect
 from sqlalchemy.dialects import postgresql
 
 revision = "003_attendance"
@@ -11,6 +12,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # 001_initial_schema uses Base.metadata.create_all(), which already
+    # creates this table when the AttendanceRecord model is present.
+    inspector = inspect(op.get_bind())
+    if "attendance_records" in inspector.get_table_names():
+        return
+
     op.create_table(
         "attendance_records",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),

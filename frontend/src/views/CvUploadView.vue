@@ -33,7 +33,7 @@ async function handleUpload() {
 
   try {
     const result = await uploadCv(selectedFile.value, auth.user!.email)
-    cvIngest.setFromUpload(result)
+    cvIngest.setFromUpload(result, selectedFile.value)
     await router.push({ name: 'cv-verify' })
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Upload failed. Please try again.'

@@ -7,6 +7,7 @@ Create Date: 2026-07-08
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect
 
 revision = "005_add_personal_email_to_users"
 down_revision = "c1d649d65fa9"
@@ -15,9 +16,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Skipped when column already exists via 001 create_all with current models.
+    cols = {c["name"] for c in inspect(op.get_bind()).get_columns("users")}
+    if "personal_email" in cols:
+        return
     op.add_column("users", sa.Column("personal_email", sa.String(length=255), nullable=True))
 
 
 def downgrade() -> None:
     op.drop_column("users", "personal_email")
-

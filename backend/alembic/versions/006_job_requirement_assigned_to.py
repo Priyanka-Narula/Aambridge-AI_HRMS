@@ -7,6 +7,7 @@ Create Date: 2026-07-13
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect
 from sqlalchemy.dialects import postgresql
 
 revision = "006_job_requirement_assigned_to"
@@ -16,22 +17,32 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "job_requirements",
-        sa.Column("assigned_to", postgresql.UUID(as_uuid=True), nullable=True),
-    )
-    op.create_index(
-        "ix_job_requirements_assigned_to",
-        "job_requirements",
-        ["assigned_to"],
-    )
-    op.create_foreign_key(
-        "fk_job_requirements_assigned_to_users",
-        "job_requirements",
-        "users",
-        ["assigned_to"],
-        ["id"],
-    )
+    # Skipped when already present via 001 create_all with current models.
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    cols = {c["name"] for c in inspector.get_columns("job_requirements")}
+    indexes = {ix["name"] for ix in inspector.get_indexes("job_requirements")}
+    fks = {fk["name"] for fk in inspector.get_foreign_keys("job_requirements")}
+
+    if "assigned_to" not in cols:
+        op.add_column(
+            "job_requirements",
+            sa.Column("assigned_to", postgresql.UUID(as_uuid=True), nullable=True),
+        )
+    if "ix_job_requirements_assigned_to" not in indexes:
+        op.create_index(
+            "ix_job_requirements_assigned_to",
+            "job_requirements",
+            ["assigned_to"],
+        )
+    if "fk_job_requirements_assigned_to_users" not in fks:
+        op.create_foreign_key(
+            "fk_job_requirements_assigned_to_users",
+            "job_requirements",
+            "users",
+            ["assigned_to"],
+            ["id"],
+        )
 
 
 def downgrade() -> None:

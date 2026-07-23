@@ -13,33 +13,40 @@ services:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hrms -d hrms"]
-      interval: 30s
+      interval: 5s
       timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
+      retries: 10
+      start_period: 10s
 
   minio:
     image: minio/minio:RELEASE.2025-01-20T14-49-07Z
     container_name: hrms-minio
     restart: "no"
-    command: server /data --console-address ":9001"
+    command: server /data --console-address ":9090"
     environment:
       MINIO_ROOT_USER: hrms
       MINIO_ROOT_PASSWORD: hrms_minio_secret
     ports:
       - "9000:9000"
-      - "9001:9001"
+      - "9001:9090"
     volumes:
       - minio_data:/data
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.25"
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: hrms-pgadmin
+    restart: "no"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   minio-init:
     image: minio/mc:latest
@@ -48,13 +55,21 @@ services:
       - minio
     entrypoint: >
       /bin/sh -c "
-      sleep 3 &&
-      mc alias set local http://minio:9000 hrms hrms_minio_secret &&
+      echo 'Waiting for MinIO API...' &&
+      for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        if mc alias set local http://minio:9000 hrms hrms_minio_secret 2>/dev/null; then
+          break;
+        fi;
+        echo \"attempt $$i: minio not ready, retrying...\";
+        sleep 2;
+      done &&
       mc mb local/hrms-cvs --ignore-existing &&
-      mc anonymous set none local/hrms-cvs
+      mc anonymous set none local/hrms-cvs &&
+      echo 'MinIO bucket hrms-cvs ready'
       "
     restart: "no"
 
 volumes:
   postgres_data:
   minio_data:
+  pgadmin_data:

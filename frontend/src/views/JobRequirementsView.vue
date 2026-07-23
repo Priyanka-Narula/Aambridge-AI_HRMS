@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { fetchClients } from '@/api/clients'
 import {
   createJobRequirement,
@@ -20,6 +21,8 @@ import type {
   JobRequirementStatus,
 } from '@/types/jobRequirement'
 import { EMPTY, orEmpty } from '@/utils/format'
+
+const router = useRouter()
 
 const auth = useAuthStore()
 const isOwner = computed(() => auth.role === 'owner')
@@ -335,6 +338,14 @@ function experienceLabel(item: JobRequirementListItem): string {
               <span v-if="item.location">{{ item.location }}</span>
               <span v-if="item.priority">{{ item.priority }}</span>
             </div>
+            <button
+              type="button"
+              class="hrms-btn hrms-btn--sm hrms-btn--primary"
+              style="margin-top: 10px"
+              @click.stop="router.push({ name: 'job-requirement-detail', params: { id: item.id } })"
+            >
+              View / Submit Candidates
+            </button>
           </div>
         </div>
 

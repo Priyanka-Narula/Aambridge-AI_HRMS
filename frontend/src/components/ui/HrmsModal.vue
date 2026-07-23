@@ -1,8 +1,10 @@
 <script setup lang="ts">
-withDefaults(
+import { computed } from 'vue'
+
+const props = withDefaults(
   defineProps<{
     title: string
-    size?: 'md' | 'lg'
+    size?: 'md' | 'lg' | 'xl'
   }>(),
   { size: 'md' },
 )
@@ -12,6 +14,12 @@ const open = defineModel<boolean>({ required: true })
 function close() {
   open.value = false
 }
+
+const sizeClass = computed(() => {
+  if (props.size === 'xl') return 'hrms-modal--xl'
+  if (props.size === 'lg') return 'hrms-modal--lg'
+  return 'hrms-modal--md'
+})
 </script>
 
 <template>
@@ -19,7 +27,7 @@ function close() {
     <div v-if="open" class="hrms-modal-overlay" @click.self="close">
       <div
         class="hrms-modal"
-        :class="size === 'lg' ? 'hrms-modal--lg' : 'hrms-modal--md'"
+        :class="sizeClass"
         role="dialog"
         aria-modal="true"
         :aria-label="title"

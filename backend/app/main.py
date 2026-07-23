@@ -1,13 +1,13 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.routes import attendance, auth, candidates, clients, cv, job_requirements, users
+from app.api.routes import attendance, auth, candidates, clients, cv, job_requirements, submissions, users
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.core.deps import get_current_user
@@ -22,7 +22,10 @@ async def lifespan(app: FastAPI):
     init_storage()
     db = SessionLocal()
     try:
-        ensure_bootstrap_owner(db)
+        try:
+            ensure_bootstrap_owner(db)
+        except Exception:
+            logger.exception("DB bootstrap skipped (database unavailable)")
     finally:
         db.close()
     yield
@@ -42,6 +45,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 
@@ -58,9 +62,15 @@ def health_db(db: Session = Depends(get_db)):
 
 @app.get("/health/storage")
 def health_storage():
-    storage = get_storage()
-    storage.client.bucket_exists(storage.bucket)
-    return {"status": "running", "storage": "connected", "bucket": storage.bucket}
+    try:
+        storage = get_storage()
+        storage.client.bucket_exists(storage.bucket)
+        return {"status": "running", "storage": "connected", "bucket": storage.bucket}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"MinIO unavailable at {settings.MINIO_ENDPOINT}: {exc}",
+        ) from exc
 
 
 @app.get("/test-upload", response_class=HTMLResponse)
@@ -335,3 +345,4 @@ app.include_router(job_requirements.router)
 app.include_router(attendance.router, dependencies=[Depends(get_current_user)])
 app.include_router(cv.router, dependencies=[Depends(get_current_user)])
 app.include_router(candidates.router, dependencies=[Depends(get_current_user)])
+app.include_router(submissions.router)

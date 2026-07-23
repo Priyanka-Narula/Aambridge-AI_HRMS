@@ -628,6 +628,11 @@
   max-width: 900px;
 }
 
+.hrms-modal--xl {
+  max-width: 1180px;
+  width: min(1180px, calc(100vw - 32px));
+}
+
 .hrms-modal__header {
   display: flex;
   align-items: center;

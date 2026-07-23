@@ -39,7 +39,16 @@ def download_candidate_resume(candidate_id: uuid.UUID, db: Session = Depends(get
 
     try:
         pdf_bytes = get_storage().download_cv(object_key)
+    except HTTPException:
+        raise
     except Exception as exc:
+        # Connection/auth issues vs missing object — don't mask as a plain 404.
+        msg = str(exc).lower()
+        if "refused" in msg or "max retries" in msg or "timed out" in msg or "timeout" in msg:
+            raise HTTPException(
+                status_code=503,
+                detail="File storage (MinIO) is unavailable. Start Docker MinIO and try again.",
+            ) from exc
         raise HTTPException(status_code=404, detail="Resume file not found in storage.") from exc
 
     safe_name = re.sub(

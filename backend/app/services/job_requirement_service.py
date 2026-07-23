@@ -174,10 +174,19 @@ def update_job_requirement_status(
 
 
 def serialize_job_requirement(requirement: JobRequirement) -> dict:
+    import json
+
     assignee = requirement.assignee
     assignee_name = None
     if assignee:
         assignee_name = f"{assignee.first_name} {assignee.last_name}".strip()
+
+    client_submission_format = None
+    if requirement.client and requirement.client.submission_format:
+        try:
+            client_submission_format = json.loads(requirement.client.submission_format)
+        except (json.JSONDecodeError, TypeError):
+            client_submission_format = None
 
     return {
         "id": requirement.id,
@@ -201,4 +210,5 @@ def serialize_job_requirement(requirement: JobRequirement) -> dict:
         "requirement_type": requirement.requirement_type,
         "created_by": requirement.created_by,
         "created_at": requirement.created_at,
+        "client_submission_format": client_submission_format,
     }
