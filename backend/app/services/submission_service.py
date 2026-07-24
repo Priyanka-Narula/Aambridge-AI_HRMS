@@ -285,7 +285,12 @@ def submit_candidate(
             detail="You are not assigned to this job requirement",
         )
 
-    _load_candidate(db, candidate_id)
+    candidate = _load_candidate(db, candidate_id)
+    if (candidate.candidate_status or "").lower() == "inactive":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Inactive candidates cannot be submitted to a job requirement",
+        )
 
     # Mandatory fields check — against the recruiter-filled submission_data
     client_fmt = jr.client.submission_format if jr.client else None

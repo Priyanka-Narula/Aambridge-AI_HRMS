@@ -136,9 +136,10 @@ const requiredFields = computed(() => clientFields.value.filter((f) => f.require
 const hasSubmissionTemplate = computed(() => clientFields.value.length > 0)
 
 const filteredCandidates = computed(() => {
+  const active = allCandidates.value.filter((c) => c.candidate_status !== 'inactive')
   const q = candidateSearch.value.trim().toLowerCase()
-  if (!q) return allCandidates.value.slice(0, 20)
-  return allCandidates.value
+  if (!q) return active.slice(0, 20)
+  return active
     .filter(
       (c) =>
         `${c.first_name} ${c.last_name}`.toLowerCase().includes(q) ||
