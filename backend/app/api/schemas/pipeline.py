@@ -35,6 +35,7 @@ class PipelineCardResponse(BaseModel):
     current_stage: str | None = None
     status: str
     owner_status: str
+    in_pipeline: bool = False
     applied_date: date | None = None
     submitted_at: datetime | None = None
     remarks: str | None = None

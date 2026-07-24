@@ -18,8 +18,9 @@ from app.models.pipeline import ApplicationStageHistory, CandidateApplication, P
 from app.models.user_access import Client, Recruiter, User
 from app.services.email_service import email_configured, send_email_with_attachment
 
-# Stages shown on the active hiring board (excludes Applied — that lives in Submissions).
+# Stages shown on the hiring board. Applied is the entry stage for approved candidates.
 BOARD_STAGE_NAMES = [
+    "Applied",
     "Shortlisted",
     "Screening",
     "Interview",
@@ -29,6 +30,7 @@ BOARD_STAGE_NAMES = [
     "Rejected",
 ]
 
+STAGE_APPLIED = "Applied"
 STAGE_SHORTLISTED = "Shortlisted"
 STAGE_OFFER = "Offer"
 STAGE_JOINED = "Joined"
@@ -36,7 +38,14 @@ STAGE_REJECTED = "Rejected"
 STAGE_ON_HOLD = "On Hold"
 
 # Main hiring path — only forward moves (plus On Hold / Rejected exits).
-FORWARD_ORDER = ["Shortlisted", "Screening", "Interview", "Offer", "Joined"]
+FORWARD_ORDER = [
+    "Applied",
+    "Shortlisted",
+    "Screening",
+    "Interview",
+    "Offer",
+    "Joined",
+]
 
 
 def allowed_stage_targets(current_name: str) -> set[str]:
@@ -44,20 +53,18 @@ def allowed_stage_targets(current_name: str) -> set[str]:
     if current_name in (STAGE_JOINED, STAGE_REJECTED):
         return set()
     if current_name == STAGE_ON_HOLD:
-        # Resume only into the active hiring path (not Rejected→back); Rejected is exit.
+        # Resume into the active hiring path; Rejected is an exit.
         return set(FORWARD_ORDER) | {STAGE_REJECTED}
     if current_name in FORWARD_ORDER:
         idx = FORWARD_ORDER.index(current_name)
         return set(FORWARD_ORDER[idx + 1 :]) | {STAGE_ON_HOLD, STAGE_REJECTED}
-    if current_name == "Applied":
-        return {STAGE_SHORTLISTED}
     return set()
 
 
 # Kept for callers / docs; derived from forward-only rules.
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     name: allowed_stage_targets(name)
-    for name in [*FORWARD_ORDER, STAGE_ON_HOLD, STAGE_REJECTED, "Applied"]
+    for name in [*FORWARD_ORDER, STAGE_ON_HOLD, STAGE_REJECTED]
 }
 
 
@@ -191,6 +198,7 @@ def serialize_pipeline_card(
         "current_stage": app.current_stage_rel.name if app.current_stage_rel else None,
         "status": app.status,
         "owner_status": app.owner_status,
+        "in_pipeline": bool(app.in_pipeline),
         "applied_date": app.applied_date,
         "submitted_at": app.submitted_at,
         "remarks": None,
@@ -220,6 +228,7 @@ def get_pipeline_board(
         )
         .filter(CandidateApplication.current_stage.in_(stage_ids))
         .filter(CandidateApplication.owner_status == "approved")
+        .filter(CandidateApplication.in_pipeline.is_(True))
     )
 
     role = normalize_role(current_user.role.name)
@@ -310,10 +319,15 @@ def shortlist_applications(
     current_user: User,
     remarks: str | None = None,
 ) -> list[dict]:
+    """Add approved candidates to the hiring pipeline at the Applied stage."""
     if normalize_role(current_user.role.name) != ROLE_OWNER:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the owner can shortlist")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner can add candidates to the pipeline",
+        )
 
-    shortlisted = _get_stage_by_name(db, STAGE_SHORTLISTED)
+    applied = _get_stage_by_name(db, STAGE_APPLIED)
+    later_stages = set(FORWARD_ORDER[1:])  # Shortlisted onwards
     results: list[dict] = []
 
     for app_id in application_ids:
@@ -323,23 +337,35 @@ def shortlist_applications(
         if app.owner_status != "approved":
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Application must be approved before shortlisting ({app_id})",
+                detail=f"Application must be approved before adding to pipeline ({app_id})",
             )
 
-        current_name = app.current_stage_rel.name if app.current_stage_rel else "Applied"
-        if current_name in BOARD_STAGE_NAMES and current_name != "Applied":
-            # Already in pipeline — keep stage, ensure active
-            app.status = "active"
+        current_name = app.current_stage_rel.name if app.current_stage_rel else None
+        already_in = bool(app.in_pipeline)
+
+        if current_name in later_stages or current_name in {STAGE_ON_HOLD, STAGE_REJECTED}:
+            if current_name == STAGE_ON_HOLD:
+                app.status = "on_hold"
+            elif current_name == STAGE_REJECTED:
+                app.status = "rejected"
+            elif current_name == STAGE_JOINED:
+                app.status = "joined"
+            else:
+                app.status = "active"
         else:
-            app.current_stage = shortlisted.id
+            # Entry point: Applied (before Shortlisted)
+            app.current_stage = applied.id
             app.status = "active"
-            _record_history(
-                db,
-                app,
-                shortlisted,
-                current_user.id,
-                remarks or "Shortlisted after client feedback",
-            )
+            if not already_in:
+                _record_history(
+                    db,
+                    app,
+                    applied,
+                    current_user.id,
+                    remarks or "Added to hiring pipeline (Applied)",
+                )
+
+        app.in_pipeline = True
 
         candidate = db.query(Candidate).filter(Candidate.id == app.candidate_id).first()
         db.flush()
@@ -371,6 +397,13 @@ def move_application_stage(
             detail="Only approved applications can move in the hiring pipeline",
         )
 
+    # Also require in_pipeline for stage moves from the board
+    if not app.in_pipeline:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Candidate must be added to the pipeline before changing stages",
+        )
+
     target = _get_stage_by_name(db, stage_name)
     if target.name not in BOARD_STAGE_NAMES:
         raise HTTPException(
@@ -378,7 +411,7 @@ def move_application_stage(
             detail=f"Cannot move to stage '{stage_name}' from the pipeline board",
         )
 
-    current_name = app.current_stage_rel.name if app.current_stage_rel else "Applied"
+    current_name = app.current_stage_rel.name if app.current_stage_rel else STAGE_APPLIED
     role = normalize_role(current_user.role.name)
 
     if current_name == target.name:
@@ -390,19 +423,12 @@ def move_application_stage(
     if role not in (ROLE_OWNER, ROLE_RECRUITER):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
-    if current_name == "Applied":
-        if role != ROLE_OWNER or target.name != STAGE_SHORTLISTED:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Owner must shortlist this candidate into the pipeline first",
-            )
-    else:
-        allowed = allowed_stage_targets(current_name)
-        if target.name not in allowed:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Cannot move from {current_name} to {target.name} (backward moves are not allowed)",
-            )
+    allowed = allowed_stage_targets(current_name)
+    if target.name not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Cannot move from {current_name} to {target.name} (backward moves are not allowed)",
+        )
 
     app.current_stage = target.id
     if target.name == STAGE_REJECTED:

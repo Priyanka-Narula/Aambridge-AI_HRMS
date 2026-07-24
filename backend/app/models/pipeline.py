@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -56,6 +56,9 @@ class CandidateApplication(Base):
         String(50), nullable=False, default="pending_review"
     )
     submission_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    in_pipeline: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
     current_stage_rel: Mapped["PipelineStage | None"] = relationship(
         back_populates="applications"

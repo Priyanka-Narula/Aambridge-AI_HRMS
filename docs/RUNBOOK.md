@@ -106,8 +106,8 @@ Hiring flow:
 
 1. Recruiter submits candidate → **Submissions** (owner review)
 2. Owner approves → **Download Approved** or **Share by Email** to client
-3. After client shortlist feedback → **Add to Pipeline** (stage = Shortlisted)
-4. Recruiters update stages on **Pipeline**: Screening → Interview → Offer → Joined
+3. After approval → use **Add to Pipeline** (stage = Applied; not shown on Pipeline until then)
+4. After client shortlist feedback → move **Applied → Shortlisted**, then Screening → Interview → Offer → Joined
 
 Email sharing needs SMTP in `backend/.env`:
 

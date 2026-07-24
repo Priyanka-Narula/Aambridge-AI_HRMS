@@ -366,12 +366,12 @@ async function handleAddToPipeline(sub?: CandidateSubmission) {
   try {
     await shortlistApplications(
       targets.map((t) => t.id),
-      'Shortlisted after client feedback',
+      'Added to hiring pipeline (Applied)',
     )
     success.value =
       targets.length === 1
-        ? `${targets[0].candidate_name} added to pipeline (Shortlisted)`
-        : `${targets.length} candidates added to pipeline (Shortlisted)`
+        ? `${targets[0].candidate_name} added to pipeline (Applied)`
+        : `${targets.length} candidates added to pipeline (Applied)`
     await load()
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to add to pipeline'
@@ -381,14 +381,7 @@ async function handleAddToPipeline(sub?: CandidateSubmission) {
 }
 
 function isInPipeline(sub: CandidateSubmission) {
-  const stage = sub.current_stage
-  return (
-    !!stage &&
-    stage !== 'Applied' &&
-    ['Shortlisted', 'Screening', 'Interview', 'Offer', 'Joined', 'On Hold', 'Rejected'].includes(
-      stage,
-    )
-  )
+  return sub.owner_status === 'approved' && !!sub.in_pipeline
 }
 
 async function handleDownloadResume() {

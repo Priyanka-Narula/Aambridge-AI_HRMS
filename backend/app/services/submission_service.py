@@ -214,15 +214,15 @@ def check_submission_eligibility(
     now = datetime.now(timezone.utc)
     client_id = job_requirement.client_id
 
-    # Rule A — same client, within 6 months
-    cutoff_6mo = now - timedelta(days=182)
+    # Rule A — same client, within 3 months
+    cutoff_3mo = now - timedelta(days=91)
     existing_same_client = (
         db.query(CandidateApplication)
         .join(JobRequirement, CandidateApplication.job_requirement_id == JobRequirement.id)
         .filter(
             CandidateApplication.candidate_id == candidate_id,
             JobRequirement.client_id == client_id,
-            CandidateApplication.submitted_at >= cutoff_6mo,
+            CandidateApplication.submitted_at >= cutoff_3mo,
         )
         .first()
     )
@@ -236,33 +236,33 @@ def check_submission_eligibility(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 f"This CV was already shared with {job_requirement.client.company_name} "
-                f"on {shared_date}. Cannot re-share within 6 months."
+                f"on {shared_date}. Cannot re-share within 3 months."
             ),
         )
 
-    # Rule B — different client, within 3 months, still in process
-    cutoff_3mo = now - timedelta(days=91)
-    existing_other = (
-        db.query(CandidateApplication, Client)
-        .join(JobRequirement, CandidateApplication.job_requirement_id == JobRequirement.id)
-        .join(Client, JobRequirement.client_id == Client.id)
-        .filter(
-            CandidateApplication.candidate_id == candidate_id,
-            JobRequirement.client_id != client_id,
-            CandidateApplication.submitted_at >= cutoff_3mo,
-            CandidateApplication.status.notin_(["rejected", "withdrawn"]),
-        )
-        .first()
-    )
-    if existing_other:
-        _, other_client = existing_other
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"Candidate is already in process with {other_client.company_name}. "
-                f"Cannot submit to another client within 3 months."
-            ),
-        )
+    # # Rule B — different client, within 3 months, still in process
+    # cutoff_3mo = now - timedelta(days=91)
+    # existing_other = (
+    #     db.query(CandidateApplication, Client)
+    #     .join(JobRequirement, CandidateApplication.job_requirement_id == JobRequirement.id)
+    #     .join(Client, JobRequirement.client_id == Client.id)
+    #     .filter(
+    #         CandidateApplication.candidate_id == candidate_id,
+    #         JobRequirement.client_id != client_id,
+    #         CandidateApplication.submitted_at >= cutoff_3mo,
+    #         CandidateApplication.status.notin_(["rejected", "withdrawn"]),
+    #     )
+    #     .first()
+    # )
+    # if existing_other:
+    #     _, other_client = existing_other
+    #     raise HTTPException(
+    #         status_code=status.HTTP_409_CONFLICT,
+    #         detail=(
+    #             f"Candidate is already in process with {other_client.company_name}. "
+    #             f"Cannot submit to another client within 3 months."
+    #         ),
+    #     )
 
 
 # ---------------------------------------------------------------------------
@@ -751,6 +751,7 @@ def serialize_submission(
         "current_stage": stage_name,
         "status": app.status,
         "owner_status": app.owner_status,
+        "in_pipeline": bool(getattr(app, "in_pipeline", False)),
         "submission_data": stored_data,
     }
 

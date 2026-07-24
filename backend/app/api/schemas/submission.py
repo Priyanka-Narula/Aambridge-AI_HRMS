@@ -30,6 +30,7 @@ class CandidateSubmissionResponse(BaseModel):
     current_stage: str | None
     status: str
     owner_status: str
+    in_pipeline: bool = False
     submission_data: dict[str, Any] | None = None
 
 

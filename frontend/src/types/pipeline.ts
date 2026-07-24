@@ -91,6 +91,7 @@ export interface ShareApprovedResult {
 
 /** Forward-only stage moves (mirrors backend). No previous-stage changes. */
 export const FORWARD_ORDER = [
+  'Applied',
   'Shortlisted',
   'Screening',
   'Interview',
@@ -110,6 +111,7 @@ export function allowedStageTargets(currentStage: string): string[] {
 
 /** @deprecated use allowedStageTargets */
 export const PIPELINE_TRANSITIONS: Record<string, string[]> = {
+  Applied: allowedStageTargets('Applied'),
   Shortlisted: allowedStageTargets('Shortlisted'),
   Screening: allowedStageTargets('Screening'),
   Interview: allowedStageTargets('Interview'),

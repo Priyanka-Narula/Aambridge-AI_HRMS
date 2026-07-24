@@ -33,6 +33,7 @@ const history = ref<StageHistoryItem[]>([])
 const historyLoading = ref(false)
 
 const STAGE_COLORS: Record<string, string> = {
+  Applied: '#64748b',
   Shortlisted: '#6366f1',
   Screening: '#0ea5e9',
   Interview: '#8b5cf6',
@@ -168,7 +169,7 @@ function formatWhen(iso: string | null | undefined) {
         <div>
           <h1 class="hrms-page-title">Hiring Pipeline</h1>
           <p class="hrms-page-subtitle">
-            Track shortlisted candidates from client feedback through to joining.
+            Track approved candidates from Applied through Shortlisted to joining.
             {{ isOwner ? 'Owners see all jobs; recruiters see assigned jobs only.' : 'Showing candidates on your assigned jobs.' }}
           </p>
           <span class="hrms-page-count">{{ cards.length }} in pipeline</span>

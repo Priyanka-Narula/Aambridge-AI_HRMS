@@ -22,6 +22,7 @@ export interface CandidateSubmission {
   current_stage: string | null
   status: string
   owner_status: OwnerStatusType
+  in_pipeline?: boolean
   submission_data: Record<string, string> | null
 }
 

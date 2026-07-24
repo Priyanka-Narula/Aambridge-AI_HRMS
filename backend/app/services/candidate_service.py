@@ -15,6 +15,13 @@ from app.models.candidate import (
     Skill,
     WorkExperience,
 )
+from app.models.offer import Offer, Placement
+from app.models.pipeline import (
+    ApplicationStageHistory,
+    CandidateApplication,
+    Interview,
+    InterviewFeedback,
+)
 from app.services.data_cleaner import clean_candidate_data
 
 logger = logging.getLogger(__name__)
@@ -152,11 +159,57 @@ def update_candidate_record(db: Session, candidate_id: uuid.UUID, payload: Candi
 
 
 def delete_candidate_record(db: Session, candidate_id: uuid.UUID) -> None:
-    candidate = get_candidate_or_404(db, candidate_id)
-    db.query(CandidateSkill).filter(CandidateSkill.candidate_id == candidate.id).delete()
-    db.query(Education).filter(Education.candidate_id == candidate.id).delete()
-    db.query(WorkExperience).filter(WorkExperience.candidate_id == candidate.id).delete()
-    db.delete(candidate)
+    # Avoid eager-loaded relationships: bulk deletes + ORM delete cause StaleDataError.
+    exists = db.query(Candidate.id).filter(Candidate.id == candidate_id).first()
+    if not exists:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    app_ids = [
+        row[0]
+        for row in db.query(CandidateApplication.id)
+        .filter(CandidateApplication.candidate_id == candidate_id)
+        .all()
+    ]
+
+    if app_ids:
+        interview_ids = [
+            row[0]
+            for row in db.query(Interview.id).filter(Interview.application_id.in_(app_ids)).all()
+        ]
+        if interview_ids:
+            db.query(InterviewFeedback).filter(
+                InterviewFeedback.interview_id.in_(interview_ids)
+            ).delete(synchronize_session=False)
+            db.query(Interview).filter(Interview.id.in_(interview_ids)).delete(
+                synchronize_session=False
+            )
+
+        db.query(ApplicationStageHistory).filter(
+            ApplicationStageHistory.application_id.in_(app_ids)
+        ).delete(synchronize_session=False)
+        db.query(Offer).filter(Offer.application_id.in_(app_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(Placement).filter(Placement.application_id.in_(app_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(CandidateApplication).filter(CandidateApplication.id.in_(app_ids)).delete(
+            synchronize_session=False
+        )
+
+    db.query(Placement).filter(Placement.candidate_id == candidate_id).delete(
+        synchronize_session=False
+    )
+    db.query(CandidateSkill).filter(CandidateSkill.candidate_id == candidate_id).delete(
+        synchronize_session=False
+    )
+    db.query(Education).filter(Education.candidate_id == candidate_id).delete(
+        synchronize_session=False
+    )
+    db.query(WorkExperience).filter(WorkExperience.candidate_id == candidate_id).delete(
+        synchronize_session=False
+    )
+    db.query(Candidate).filter(Candidate.id == candidate_id).delete(synchronize_session=False)
     db.commit()
 
 
