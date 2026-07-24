@@ -11,6 +11,11 @@ import {
   downloadSubmission,
   fetchOwnerDashboard,
 } from '@/api/submissions'
+import {
+  fetchEmailStatus,
+  shareApprovedProfiles,
+  shortlistApplications,
+} from '@/api/pipeline'
 import ResumePreview from '@/components/candidates/ResumePreview.vue'
 import HrmsAlert from '@/components/ui/HrmsAlert.vue'
 import HrmsModal from '@/components/ui/HrmsModal.vue'
@@ -52,6 +57,12 @@ const showResumePreview = ref(false)
 const previewResumeUrl = ref<string | null>(null)
 const previewResumeLoading = ref(false)
 const previewResumeError = ref<string | null>(null)
+const sharingEmail = ref(false)
+const shortlisting = ref(false)
+const emailConfigured = ref(false)
+const showShareModal = ref(false)
+const shareEmails = ref('')
+const shareMessage = ref('')
 
 function revokePreviewResumeUrl() {
   if (previewResumeUrl.value) {
@@ -118,7 +129,12 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    dashboard.value = await fetchOwnerDashboard()
+    const [dash, mail] = await Promise.all([
+      fetchOwnerDashboard(),
+      fetchEmailStatus().catch(() => ({ configured: false })),
+    ])
+    dashboard.value = dash
+    emailConfigured.value = mail.configured
     if (selected.value) {
       const refreshed = dashboard.value.find((c) => c.client_id === selected.value!.client_id)
       selected.value = refreshed ?? null
@@ -308,6 +324,73 @@ async function handleDownloadApprovedClient() {
   }
 }
 
+function openShareModal() {
+  shareEmails.value = ''
+  shareMessage.value = ''
+  showShareModal.value = true
+}
+
+async function handleShareApproved() {
+  if (!selected.value) return
+  sharingEmail.value = true
+  error.value = ''
+  try {
+    const emails = shareEmails.value
+      .split(/[,;\s]+/)
+      .map((e) => e.trim())
+      .filter(Boolean)
+    const result = await shareApprovedProfiles(selected.value.client_id, {
+      to_emails: emails.length ? emails : undefined,
+      message: shareMessage.value.trim() || undefined,
+    })
+    success.value = `Shared ${result.candidate_count} profile(s) to ${result.sent_to.join(', ')}`
+    showShareModal.value = false
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to share by email'
+  } finally {
+    sharingEmail.value = false
+  }
+}
+
+async function handleAddToPipeline(sub?: CandidateSubmission) {
+  if (!selected.value) return
+  const targets = sub
+    ? [sub]
+    : selected.value.jobs.flatMap((j) => j.submissions).filter((s) => s.owner_status === 'approved')
+  if (!targets.length) {
+    error.value = 'No approved candidates to add to pipeline'
+    return
+  }
+  shortlisting.value = true
+  error.value = ''
+  try {
+    await shortlistApplications(
+      targets.map((t) => t.id),
+      'Shortlisted after client feedback',
+    )
+    success.value =
+      targets.length === 1
+        ? `${targets[0].candidate_name} added to pipeline (Shortlisted)`
+        : `${targets.length} candidates added to pipeline (Shortlisted)`
+    await load()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to add to pipeline'
+  } finally {
+    shortlisting.value = false
+  }
+}
+
+function isInPipeline(sub: CandidateSubmission) {
+  const stage = sub.current_stage
+  return (
+    !!stage &&
+    stage !== 'Applied' &&
+    ['Shortlisted', 'Screening', 'Interview', 'Offer', 'Joined', 'On Hold', 'Rejected'].includes(
+      stage,
+    )
+  )
+}
+
 async function handleDownloadResume() {
   if (!candidateDetail.value?.resume_url) return
   downloadingResume.value = true
@@ -491,6 +574,22 @@ const formatExpDate = (d: string | null | undefined) => {
                 >
                   {{ actioning === `dl-${viewingSubmission.id}` ? 'Downloading…' : 'Download Excel' }}
                 </button>
+                <button
+                  v-if="viewingSubmission.owner_status === 'approved' && !isInPipeline(viewingSubmission)"
+                  type="button"
+                  class="hrms-btn hrms-btn--sm hrms-btn--success"
+                  :disabled="shortlisting"
+                  @click="handleAddToPipeline(viewingSubmission)"
+                >
+                  {{ shortlisting ? 'Adding…' : 'Add to Pipeline' }}
+                </button>
+                <RouterLink
+                  v-if="viewingSubmission.owner_status === 'approved' && isInPipeline(viewingSubmission)"
+                  class="hrms-btn hrms-btn--sm"
+                  to="/pipeline"
+                >
+                  View in Pipeline
+                </RouterLink>
                 <button
                   v-if="candidateDetail.resume_url"
                   type="button"
@@ -798,6 +897,29 @@ const formatExpDate = (d: string | null | undefined) => {
               >
                 {{ downloadingClient ? 'Downloading…' : 'Download Approved' }}
               </button>
+              <button
+                v-if="approvedCount(selected) > 0"
+                type="button"
+                class="hrms-btn hrms-btn--sm"
+                :disabled="sharingEmail"
+                :title="
+                  emailConfigured
+                    ? 'Email approved profiles to client contacts'
+                    : 'Configure SMTP in backend/.env, or download Excel and send manually'
+                "
+                @click="openShareModal"
+              >
+                Share by Email
+              </button>
+              <button
+                v-if="approvedCount(selected) > 0"
+                type="button"
+                class="hrms-btn hrms-btn--sm hrms-btn--success"
+                :disabled="shortlisting"
+                @click="handleAddToPipeline()"
+              >
+                {{ shortlisting ? 'Adding…' : 'Add Approved to Pipeline' }}
+              </button>
             </div>
 
             <div class="hrms-tabs">
@@ -957,6 +1079,48 @@ const formatExpDate = (d: string | null | undefined) => {
         </button>
       </template>
     </HrmsModal>
+
+    <HrmsModal v-model="showShareModal" title="Share approved profiles by email" size="md">
+      <p class="hrms-page-subtitle" style="margin-bottom: 14px">
+        Sends an Excel of approved candidate profiles to the client.
+        <template v-if="!emailConfigured">
+          SMTP is not configured — set <code>SMTP_HOST</code> / <code>SMTP_FROM</code> in
+          <code>backend/.env</code>, or download Excel and email it yourself.
+        </template>
+        Leave recipients blank to use primary client contact emails.
+      </p>
+      <div class="hrms-form-stack">
+        <label class="hrms-field">
+          <span>Recipient emails</span>
+          <input
+            v-model="shareEmails"
+            type="text"
+            class="hrms-input"
+            placeholder="hr@client.com, hiring@client.com"
+          />
+        </label>
+        <label class="hrms-field">
+          <span>Message (optional)</span>
+          <textarea
+            v-model="shareMessage"
+            class="hrms-input"
+            rows="4"
+            placeholder="Please review and share shortlisted candidates…"
+          />
+        </label>
+      </div>
+      <template #footer>
+        <button type="button" class="hrms-btn" @click="showShareModal = false">Cancel</button>
+        <button
+          type="button"
+          class="hrms-btn hrms-btn--primary"
+          :disabled="sharingEmail || !emailConfigured"
+          @click="handleShareApproved"
+        >
+          {{ sharingEmail ? 'Sending…' : 'Send email' }}
+        </button>
+      </template>
+    </HrmsModal>
   </div>
 </template>
 
@@ -965,6 +1129,20 @@ const formatExpDate = (d: string | null | undefined) => {
   margin-left: 6px;
   opacity: 0.7;
   font-size: 0.75em;
+}
+
+.hrms-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hrms-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
 }
 
 .submissions-job-meta {

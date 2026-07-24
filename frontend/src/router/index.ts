@@ -71,7 +71,7 @@ const router = createRouter({
         {
           path: 'pipeline',
           name: 'pipeline',
-          component: () => import('@/views/PlaceholderView.vue'),
+          component: () => import('@/views/PipelineView.vue'),
           meta: { title: 'Pipeline', roles: ['owner', 'recruiter'] },
         },
         {

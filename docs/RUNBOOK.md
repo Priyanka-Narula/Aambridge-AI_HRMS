@@ -100,6 +100,28 @@ docker compose up -d --force-recreate minio minio-init
 
 - If a resume returns 503, MinIO was down when requested — restart Docker services and retry. Re-upload the CV if the object was never stored.
 
+### Pipeline / share by email
+
+Hiring flow:
+
+1. Recruiter submits candidate → **Submissions** (owner review)
+2. Owner approves → **Download Approved** or **Share by Email** to client
+3. After client shortlist feedback → **Add to Pipeline** (stage = Shortlisted)
+4. Recruiters update stages on **Pipeline**: Screening → Interview → Offer → Joined
+
+Email sharing needs SMTP in `backend/.env`:
+
+```
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=...
+SMTP_PASSWORD=...
+SMTP_FROM=talent@aambridge.ai
+SMTP_USE_TLS=true
+```
+
+Without SMTP, use **Download Approved** and send the Excel manually.
+
 ### Frontend “Unauthorized” redirect issues
 
 - Verify user role returned from `/api/v1/auth/me`

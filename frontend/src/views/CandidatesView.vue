@@ -10,8 +10,10 @@ import {
   fetchCandidates,
   updateCandidate,
 } from '@/api/candidates'
+import { fetchCandidateStageHistory } from '@/api/pipeline'
 import type { Candidate, CandidateDraft } from '@/types/candidate'
 import { candidateToDraft, draftToUpdatePayload } from '@/types/candidate'
+import type { CandidateApplicationHistory } from '@/types/pipeline'
 import HrmsModal from '@/components/ui/HrmsModal.vue'
 import {
   avatarHue as hueFromId,
@@ -27,7 +29,7 @@ const candidates = ref<Candidate[]>([])
 const selected = ref<Candidate | null>(null)
 const searchQuery = ref('')
 const statusFilter = ref('all')
-const activeTab = ref<'overview' | 'experience' | 'education'>('overview')
+const activeTab = ref<'overview' | 'experience' | 'education' | 'history'>('overview')
 const loading = ref(true)
 const error = ref('')
 const showEditModal = ref(false)
@@ -42,6 +44,51 @@ const previewResumeError = ref<string | null>(null)
 const editResumeUrl = ref<string | null>(null)
 const editResumeLoading = ref(false)
 const editResumeError = ref<string | null>(null)
+const stageApplications = ref<CandidateApplicationHistory[]>([])
+const stageHistoryLoading = ref(false)
+const stageHistoryError = ref('')
+
+const STAGE_COLORS: Record<string, string> = {
+  Applied: '#64748b',
+  Shortlisted: '#6366f1',
+  Screening: '#0ea5e9',
+  Interview: '#8b5cf6',
+  Offer: '#f59e0b',
+  Joined: '#22c55e',
+  'On Hold': '#94a3b8',
+  Rejected: '#ef4444',
+}
+
+function stageColor(name: string | null | undefined) {
+  if (!name) return '#94a3b8'
+  return STAGE_COLORS[name] ?? '#94a3b8'
+}
+
+function formatWhen(iso: string | null | undefined) {
+  if (!iso) return EMPTY
+  return new Date(iso).toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+async function loadStageHistory(candidateId: string) {
+  stageHistoryLoading.value = true
+  stageHistoryError.value = ''
+  try {
+    const data = await fetchCandidateStageHistory(candidateId)
+    stageApplications.value = data.applications
+  } catch (err) {
+    stageApplications.value = []
+    stageHistoryError.value =
+      err instanceof Error ? err.message : 'Failed to load stage history'
+  } finally {
+    stageHistoryLoading.value = false
+  }
+}
 
 function revokeObjectUrl(url: { value: string | null }) {
   if (url.value) {
@@ -169,6 +216,7 @@ const filtered = computed(() => {
 
 const statusMeta: Record<string, { label: string; color: string }> = {
   active:            { label: 'Active',            color: '#22c55e' },
+  inactive:          { label: 'Inactive',          color: '#94a3b8' },
   pending_approval:  { label: 'Pending',           color: '#f59e0b' },
   interviewing:        { label: 'Interviewing',      color: '#3b82f6' },
   offered:             { label: 'Offered',           color: '#a855f7' },
@@ -196,15 +244,20 @@ const avatarHue = (c: Candidate) => hueFromId(c.id)
 
 async function selectCandidate(c: Candidate) {
   activeTab.value = 'overview'
+  stageApplications.value = []
+  stageHistoryError.value = ''
   try {
     selected.value = await fetchCandidate(c.id)
   } catch {
     selected.value = c
   }
+  void loadStageHistory(c.id)
 }
 
 const closePanel = () => {
   selected.value = null
+  stageApplications.value = []
+  stageHistoryError.value = ''
 }
 
 async function saveEdit() {
@@ -489,6 +542,11 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
             :class="{ 'hrms-tab--active': activeTab === 'education' }"
             @click="activeTab = 'education'"
           >Education</button>
+          <button
+            class="hrms-tab"
+            :class="{ 'hrms-tab--active': activeTab === 'history' }"
+            @click="activeTab = 'history'"
+          >Stage history</button>
         </div>
 
         <div class="hrms-panel-body hrms-scroll">
@@ -651,6 +709,62 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
             </section>
           </template>
 
+          <template v-else-if="activeTab === 'history'">
+            <section class="hrms-section">
+              <h3 class="hrms-section-title">Application stage history</h3>
+              <div v-if="stageHistoryLoading" class="hrms-empty-inline">Loading stage history…</div>
+              <p v-else-if="stageHistoryError" class="hrms-empty-inline" style="color: #b91c1c">
+                {{ stageHistoryError }}
+              </p>
+              <p v-else-if="!stageApplications.length" class="hrms-empty-inline">
+                No pipeline applications yet for this candidate.
+              </p>
+              <div v-else class="candidate-stage-apps">
+                <article
+                  v-for="app in stageApplications"
+                  :key="app.application_id"
+                  class="candidate-stage-app"
+                >
+                  <header class="candidate-stage-app__header">
+                    <div>
+                      <strong>{{ app.job_title }}</strong>
+                      <span class="candidate-stage-app__client">{{ app.client_name }}</span>
+                    </div>
+                    <span
+                      class="hrms-status-badge"
+                      :style="`--sc: ${stageColor(app.current_stage)}`"
+                    >
+                      {{ app.current_stage ?? 'No stage' }}
+                    </span>
+                  </header>
+                  <div class="candidate-stage-app__meta">
+                    <span>Owner: {{ app.owner_status.replace(/_/g, ' ') }}</span>
+                    <span>Status: {{ app.status }}</span>
+                    <span v-if="app.submitted_at">Submitted: {{ formatWhen(app.submitted_at) }}</span>
+                  </div>
+                  <ol v-if="app.history.length" class="candidate-stage-timeline">
+                    <li v-for="item in app.history" :key="item.id">
+                      <span
+                        class="candidate-stage-timeline__dot"
+                        :style="{ background: stageColor(item.stage_name) }"
+                      />
+                      <div>
+                        <strong>{{ item.stage_name }}</strong>
+                        <span>
+                          {{ item.moved_by_name || 'System' }} · {{ formatWhen(item.created_at) }}
+                        </span>
+                        <p v-if="item.remarks">{{ item.remarks }}</p>
+                      </div>
+                    </li>
+                  </ol>
+                  <p v-else class="hrms-empty-inline">
+                    No stage moves recorded yet (still awaiting shortlist / pipeline updates).
+                  </p>
+                </article>
+              </div>
+            </section>
+          </template>
+
         </div>
       </div>
     </Transition>
@@ -712,6 +826,86 @@ const statuses = ['all', 'active', 'pending_approval', 'interviewing', 'offered'
 </template>
 
 <style scoped>
+.candidate-stage-apps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.candidate-stage-app {
+  border: 1px solid var(--hrms-border);
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--hrms-surface, #fff);
+}
+
+.candidate-stage-app__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.candidate-stage-app__header strong {
+  display: block;
+  font-size: 0.92rem;
+}
+
+.candidate-stage-app__client {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: var(--hrms-text-muted);
+}
+
+.candidate-stage-app__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 10px 0 12px;
+  font-size: 0.75rem;
+  color: var(--hrms-text-muted);
+}
+
+.candidate-stage-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.candidate-stage-timeline li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.candidate-stage-timeline__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.candidate-stage-timeline strong {
+  display: block;
+  font-size: 0.85rem;
+}
+
+.candidate-stage-timeline span {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--hrms-text-muted);
+}
+
+.candidate-stage-timeline p {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+}
+
 .candidates-edit-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);

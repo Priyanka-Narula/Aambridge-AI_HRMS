@@ -11,13 +11,13 @@ logger = logging.getLogger(__name__)
 
 MAX_CV_CHARS = 14_000
 
-# Prefer currently available Inference Providers chat models.
-# Meta-Llama-3-8B-Instruct is no longer served for many HF accounts.
+# Models verified against Inference Providers chat_completion for typical HF tokens.
 DEFAULT_MODEL_CANDIDATES = (
-    "mistralai/Mistral-7B-Instruct-v0.3",
-    "mistralai/Mistral-Nemo-Instruct-2407",
-    "HuggingFaceH4/zephyr-7b-beta",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "Qwen/Qwen2.5-Coder-7B-Instruct",
+    "meta-llama/Meta-Llama-3-8B-Instruct",
     "Qwen/Qwen2.5-7B-Instruct",
+    "mistralai/Mistral-7B-Instruct-v0.3",
 )
 
 EXTRACTION_SCHEMA = """{
@@ -109,18 +109,24 @@ def _is_model_unavailable(exc: Exception) -> bool:
             "model_not_supported",
             "not supported by any provider",
             "model is not supported",
+            "is not a chat model",
+            "not supported for task",
+            "supported task:",
             "does not exist",
             "404",
             "not found",
             "no provider",
+            "forbidden",
+            "401",
+            "403",
         )
     )
 
 
 def _model_candidates() -> list[str]:
-    primary = (settings.HF_MODEL or "").strip()
+    primary = (settings.HF_MODEL or "").strip().strip('"')
     extras = [
-        m.strip()
+        m.strip().strip('"')
         for m in (settings.HF_MODEL_FALLBACKS or "").split(",")
         if m.strip()
     ]
@@ -133,13 +139,33 @@ def _model_candidates() -> list[str]:
 
 def _create_client() -> InferenceClient:
     kwargs: dict[str, Any] = {
-        "token": settings.HF_API_TOKEN,
+        "token": (settings.HF_API_TOKEN or "").strip().strip('"'),
         "timeout": settings.HF_TIMEOUT_SECONDS,
     }
-    provider = (settings.HF_PROVIDER or "").strip()
-    if provider:
+    provider = (settings.HF_PROVIDER or "").strip().lower()
+    # "auto" lets the hub pick a provider; passing it as a literal can mis-route.
+    if provider and provider not in {"auto", "none", "default"}:
         kwargs["provider"] = provider
     return InferenceClient(**kwargs)
+
+
+def _chat_complete(client: InferenceClient, model: str, system: str, user: str) -> str:
+    """Call chat completion (correct task for instruct/chat models)."""
+    response = client.chat_completion(
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        max_tokens=settings.HF_MAX_TOKENS,
+        temperature=0.1,
+    )
+    if not response.choices:
+        raise RuntimeError(f"Empty choices from LLM model {model}")
+    content = _message_content(response.choices[0].message)
+    if not content:
+        raise RuntimeError(f"Empty response from LLM model {model}")
+    return content
 
 
 def parse_candidate_with_llm(raw_text: str, storage_uri: str, source: str) -> dict[str, Any]:
@@ -157,18 +183,7 @@ def parse_candidate_with_llm(raw_text: str, storage_uri: str, source: str) -> di
     for model in _model_candidates():
         try:
             logger.info("Calling HF chat model: %s", model)
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                max_tokens=settings.HF_MAX_TOKENS,
-                temperature=0.1,
-            )
-            content = _message_content(response.choices[0].message)
-            if not content:
-                raise RuntimeError(f"Empty response from LLM model {model}")
+            content = _chat_complete(client, model, system, user)
             used_model = model
             break
         except Exception as exc:
