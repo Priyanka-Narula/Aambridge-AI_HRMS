@@ -11,23 +11,28 @@ import PageLayout from '@/components/ui/PageLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { PipelineCard, PipelineStage, StageHistoryItem } from '@/types/pipeline'
 import { allowedStageTargets } from '@/types/pipeline'
-import { avatarHue, EMPTY, initials, orEmpty } from '@/utils/format'
+import { avatarHue, EMPTY, formatInr, initials, orEmpty } from '@/utils/format'
 
 const auth = useAuthStore()
 const loading = ref(true)
 const error = ref('')
 const success = ref('')
 const searchQuery = ref('')
+const stageFilter = ref<string>('all')
 const stages = ref<PipelineStage[]>([])
 const cards = ref<PipelineCard[]>([])
 
 const selected = ref<PipelineCard | null>(null)
+const panelCollapsed = ref(false)
 const showMoveModal = ref(false)
 const targetStage = ref('')
 const moveRemarks = ref('')
 const offeredCtc = ref('')
 const joiningDate = ref('')
 const joinedDate = ref('')
+const interviewScheduledAt = ref('')
+const interviewerName = ref('')
+const interviewMode = ref('online')
 const moving = ref(false)
 const history = ref<StageHistoryItem[]>([])
 const historyLoading = ref(false)
@@ -45,17 +50,34 @@ const STAGE_COLORS: Record<string, string> = {
 
 const isOwner = computed(() => auth.role === 'owner')
 
-const cardsByStage = computed(() => {
-  const map: Record<string, PipelineCard[]> = {}
-  for (const stage of stages.value) {
-    map[stage.name] = []
-  }
+const stageOrder = computed(() => {
+  const map = new Map<string, number>()
+  for (const stage of stages.value) map.set(stage.name, stage.order_no)
+  return map
+})
+
+const stageCounts = computed(() => {
+  const counts: Record<string, number> = { all: cards.value.length }
+  for (const stage of stages.value) counts[stage.name] = 0
   for (const card of cards.value) {
     const key = card.current_stage ?? ''
-    if (!map[key]) map[key] = []
-    map[key].push(card)
+    counts[key] = (counts[key] ?? 0) + 1
   }
-  return map
+  return counts
+})
+
+const filteredRows = computed(() => {
+  let rows = [...cards.value]
+  if (stageFilter.value !== 'all') {
+    rows = rows.filter((c) => c.current_stage === stageFilter.value)
+  }
+  rows.sort((a, b) => {
+    const ao = stageOrder.value.get(a.current_stage ?? '') ?? 999
+    const bo = stageOrder.value.get(b.current_stage ?? '') ?? 999
+    if (ao !== bo) return ao - bo
+    return a.candidate_name.localeCompare(b.candidate_name)
+  })
+  return rows
 })
 
 const nextStages = computed(() => {
@@ -91,6 +113,7 @@ onMounted(loadBoard)
 
 async function openCard(card: PipelineCard) {
   selected.value = card
+  panelCollapsed.value = false
   history.value = []
   historyLoading.value = true
   try {
@@ -104,8 +127,13 @@ async function openCard(card: PipelineCard) {
 
 function closeCard() {
   selected.value = null
+  panelCollapsed.value = false
   showMoveModal.value = false
   resetMoveForm()
+}
+
+function togglePanelCollapse() {
+  panelCollapsed.value = !panelCollapsed.value
 }
 
 function resetMoveForm() {
@@ -114,12 +142,22 @@ function resetMoveForm() {
   offeredCtc.value = ''
   joiningDate.value = ''
   joinedDate.value = ''
+  interviewScheduledAt.value = ''
+  interviewerName.value = ''
+  interviewMode.value = 'online'
 }
 
 function openMoveModal(stage?: string) {
   resetMoveForm()
   targetStage.value = stage ?? nextStages.value[0] ?? ''
   showMoveModal.value = true
+}
+
+function openMoveFromRow(card: PipelineCard, event: Event) {
+  event.stopPropagation()
+  selected.value = card
+  panelCollapsed.value = false
+  openMoveModal()
 }
 
 async function confirmMove() {
@@ -133,6 +171,11 @@ async function confirmMove() {
       offered_ctc: offeredCtc.value ? Number(offeredCtc.value) : null,
       joining_date: joiningDate.value || null,
       joined_date: joinedDate.value || null,
+      interview_scheduled_at: interviewScheduledAt.value
+        ? new Date(interviewScheduledAt.value).toISOString()
+        : null,
+      interviewer_name: interviewerName.value.trim() || null,
+      interview_mode: interviewMode.value.trim() || null,
     })
     const idx = cards.value.findIndex((c) => c.id === updated.id)
     if (idx !== -1) cards.value[idx] = updated
@@ -148,7 +191,8 @@ async function confirmMove() {
   }
 }
 
-function stageColor(name: string) {
+function stageColor(name: string | null | undefined) {
+  if (!name) return '#94a3b8'
   return STAGE_COLORS[name] ?? '#94a3b8'
 }
 
@@ -160,121 +204,251 @@ function formatWhen(iso: string | null | undefined) {
     year: 'numeric',
   })
 }
+
+function formatDateTime(iso: string | null | undefined) {
+  if (!iso) return EMPTY
+  return new Date(iso).toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function formatExp(years: number | null | undefined) {
+  if (years == null) return EMPTY
+  return `${years}y`
+}
 </script>
 
 <template>
   <PageLayout variant="full">
-    <div class="pipeline-page">
-      <header class="hrms-page-header hrms-page-header--compact">
-        <div>
-          <h1 class="hrms-page-title">Hiring Pipeline</h1>
-          <p class="hrms-page-subtitle">
-            Track approved candidates from Applied through Shortlisted to joining.
-            {{ isOwner ? 'Owners see all jobs; recruiters see assigned jobs only.' : 'Showing candidates on your assigned jobs.' }}
-          </p>
-          <span class="hrms-page-count">{{ cards.length }} in pipeline</span>
-        </div>
-        <div class="hrms-page-header__actions">
-          <input
-            v-model="searchQuery"
-            type="search"
-            class="hrms-input"
-            placeholder="Search candidate, job, client…"
-            style="min-width: 240px"
-          />
-          <button type="button" class="hrms-btn" :disabled="loading" @click="loadBoard">
-            Refresh
-          </button>
-        </div>
-      </header>
-
-      <HrmsAlert v-if="error" type="error" dismissible @dismiss="error = ''">{{ error }}</HrmsAlert>
-      <HrmsAlert v-if="success" type="success" dismissible @dismiss="success = ''">{{ success }}</HrmsAlert>
-
-      <div v-if="loading" class="hrms-empty-inline">Loading pipeline…</div>
-
-      <div v-else class="pipeline-board hrms-scroll">
-        <section
-          v-for="stage in stages"
-          :key="stage.id"
-          class="pipeline-column"
-        >
-          <header class="pipeline-column__header">
-            <span
-              class="pipeline-column__dot"
-              :style="{ background: stageColor(stage.name) }"
-            />
-            <h2 class="pipeline-column__title">{{ stage.name }}</h2>
-            <span class="pipeline-column__count">
-              {{ (cardsByStage[stage.name] ?? []).length }}
-            </span>
+    <div class="hrms-split pipeline-split">
+      <div
+        class="hrms-split__main pipeline-main"
+        :class="{
+          'hrms-split__main--narrow': selected && !panelCollapsed,
+          'pipeline-main--rail': selected && panelCollapsed,
+        }"
+      >
+        <div class="pipeline-page">
+          <header class="hrms-page-header hrms-page-header--compact">
+            <div>
+              <h1 class="hrms-page-title">Hiring Pipeline</h1>
+              <p class="hrms-page-subtitle">
+                Track approved candidates from Applied through Shortlisted to joining.
+                {{ isOwner ? 'Owners see all jobs; recruiters see assigned jobs only.' : 'Showing candidates on your assigned jobs.' }}
+              </p>
+              <span class="hrms-page-count">{{ cards.length }} in pipeline</span>
+            </div>
+            <div class="hrms-page-header__actions">
+              <input
+                v-model="searchQuery"
+                type="search"
+                class="hrms-input"
+                placeholder="Search candidate, job, client…"
+                style="min-width: 220px"
+              />
+              <button type="button" class="hrms-btn" :disabled="loading" @click="loadBoard">
+                Refresh
+              </button>
+            </div>
           </header>
 
-          <div class="pipeline-column__body">
+          <HrmsAlert v-if="error" type="error" dismissible @dismiss="error = ''">{{ error }}</HrmsAlert>
+          <HrmsAlert v-if="success" type="success" dismissible @dismiss="success = ''">{{ success }}</HrmsAlert>
+
+          <div class="pipeline-filters">
             <button
-              v-for="card in cardsByStage[stage.name] ?? []"
-              :key="card.id"
               type="button"
-              class="pipeline-card"
-              :class="{ 'pipeline-card--active': selected?.id === card.id }"
-              @click="openCard(card)"
+              class="pipeline-filter"
+              :class="{ 'pipeline-filter--active': stageFilter === 'all' }"
+              @click="stageFilter = 'all'"
             >
-              <div class="pipeline-card__top">
-                <div
-                  class="hrms-avatar hrms-avatar--sm"
-                  :style="`--hue: ${avatarHue(card.candidate_id)}`"
-                >
-                  {{ initials(card.candidate_name.split(' ')[0] ?? '', card.candidate_name.split(' ')[1] ?? '') }}
-                </div>
-                <div class="pipeline-card__identity">
-                  <strong>{{ card.candidate_name }}</strong>
-                  <span>{{ orEmpty(card.current_designation) }}</span>
-                </div>
-              </div>
-              <div class="pipeline-card__meta">
-                <span>{{ card.job_title }}</span>
-                <span>{{ card.client_name }}</span>
-              </div>
-              <div v-if="card.job_assignee_name" class="pipeline-card__recruiter">
-                {{ card.job_assignee_name }}
-              </div>
+              All
+              <span>{{ stageCounts.all ?? 0 }}</span>
             </button>
-
-            <p
-              v-if="!(cardsByStage[stage.name] ?? []).length"
-              class="pipeline-column__empty"
+            <button
+              v-for="stage in stages"
+              :key="stage.id"
+              type="button"
+              class="pipeline-filter"
+              :class="{ 'pipeline-filter--active': stageFilter === stage.name }"
+              @click="stageFilter = stage.name"
             >
-              No candidates
-            </p>
+              <i class="pipeline-filter__dot" :style="{ background: stageColor(stage.name) }" />
+              {{ stage.name }}
+              <span>{{ stageCounts[stage.name] ?? 0 }}</span>
+            </button>
           </div>
-        </section>
-      </div>
-    </div>
 
-    <!-- Detail drawer -->
-    <Teleport to="body">
+          <div v-if="loading" class="hrms-empty-inline">Loading pipeline…</div>
+
+          <div v-else-if="!filteredRows.length" class="hrms-empty-inline">
+            No candidates in this view.
+          </div>
+
+          <div v-else class="pipeline-table-wrap hrms-scroll">
+            <table class="pipeline-table">
+              <thead>
+                <tr>
+                  <th>Candidate</th>
+                  <th>Stage</th>
+                  <th>Job / Client</th>
+                  <th>Experience</th>
+                  <th>Recruiter</th>
+                  <th>Contact</th>
+                  <th>Submitted</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="row in filteredRows"
+                  :key="row.id"
+                  class="pipeline-table__row"
+                  :class="{ 'pipeline-table__row--active': selected?.id === row.id }"
+                  @click="openCard(row)"
+                >
+                  <td>
+                    <div class="pipeline-table__person">
+                      <div
+                        class="hrms-avatar hrms-avatar--sm"
+                        :style="`--hue: ${avatarHue(row.candidate_id)}`"
+                      >
+                        {{
+                          initials(
+                            row.candidate_name.split(' ')[0] ?? '',
+                            row.candidate_name.split(' ')[1] ?? '',
+                          )
+                        }}
+                      </div>
+                      <div class="pipeline-table__person-text">
+                        <strong>{{ row.candidate_name }}</strong>
+                        <span>
+                          {{ orEmpty(row.current_designation) }}
+                          <template v-if="row.current_company"> · {{ row.current_company }}</template>
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span
+                      class="hrms-status-badge"
+                      :style="`--sc: ${stageColor(row.current_stage)}`"
+                    >
+                      {{ row.current_stage ?? EMPTY }}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="pipeline-table__stack">
+                      <strong>{{ row.job_title }}</strong>
+                      <span>{{ row.client_name }}</span>
+                    </div>
+                  </td>
+                  <td>{{ formatExp(row.total_experience_years) }}</td>
+                  <td>{{ row.job_assignee_name || EMPTY }}</td>
+                  <td>
+                    <div class="pipeline-table__stack">
+                      <span class="pipeline-table__email">{{ row.candidate_email || EMPTY }}</span>
+                      <span>{{ row.candidate_phone || EMPTY }}</span>
+                    </div>
+                  </td>
+                  <td>{{ formatWhen(row.submitted_at) }}</td>
+                  <td class="pipeline-table__actions" @click.stop>
+                    <button
+                      v-if="allowedStageTargets(row.current_stage ?? '').length"
+                      type="button"
+                      class="hrms-btn hrms-btn--sm"
+                      @click="openMoveFromRow(row, $event)"
+                    >
+                      Move
+                    </button>
+                    <button type="button" class="hrms-btn hrms-btn--sm" @click="openCard(row)">
+                      Details
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <Transition name="panel">
-        <div
+        <aside
           v-if="selected"
-          class="pipeline-drawer-root"
-          role="dialog"
-          aria-modal="true"
+          class="hrms-split__aside pipeline-aside"
+          :class="{ 'pipeline-aside--collapsed': panelCollapsed }"
           :aria-label="`Candidate ${selected.candidate_name}`"
         >
-          <button
-            type="button"
-            class="pipeline-drawer__backdrop"
-            aria-label="Close candidate details"
-            @click="closeCard"
-          />
-          <aside class="pipeline-drawer hrms-scroll">
-            <header class="pipeline-drawer__header">
-              <h2 class="pipeline-drawer__heading">Candidate details</h2>
-              <button type="button" class="hrms-btn hrms-btn--icon" aria-label="Close" @click="closeCard">
-                ×
-              </button>
-            </header>
+          <header class="pipeline-aside__header">
+            <button
+              type="button"
+              class="hrms-btn hrms-btn--icon"
+              :aria-label="panelCollapsed ? 'Expand details' : 'Collapse details'"
+              :title="panelCollapsed ? 'Expand' : 'Collapse'"
+              @click="togglePanelCollapse"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path
+                  v-if="panelCollapsed"
+                  d="M7 4.5L11.5 9L7 13.5"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  v-else
+                  d="M11 4.5L6.5 9L11 13.5"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <h2 v-if="!panelCollapsed" class="pipeline-aside__heading">Candidate details</h2>
+            <button
+              type="button"
+              class="hrms-btn hrms-btn--icon"
+              aria-label="Close details"
+              title="Close"
+              @click="closeCard"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path
+                  d="M13.5 4.5L4.5 13.5M4.5 4.5L13.5 13.5"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+          </header>
 
+          <div v-if="panelCollapsed" class="pipeline-aside__rail" @click="togglePanelCollapse">
+            <div
+              class="hrms-avatar hrms-avatar--sm"
+              :style="`--hue: ${avatarHue(selected.candidate_id)}`"
+            >
+              {{
+                initials(
+                  selected.candidate_name.split(' ')[0] ?? '',
+                  selected.candidate_name.split(' ')[1] ?? '',
+                )
+              }}
+            </div>
+            <span class="pipeline-aside__rail-name">{{ selected.candidate_name }}</span>
+            <span
+              class="pipeline-aside__rail-stage"
+              :style="{ background: stageColor(selected.current_stage) }"
+            />
+          </div>
+
+          <div v-else class="pipeline-aside__body hrms-scroll">
             <div class="hrms-panel-hero">
               <div
                 class="hrms-avatar hrms-avatar--lg"
@@ -287,7 +461,7 @@ function formatWhen(iso: string | null | undefined) {
                   )
                 }}
               </div>
-              <div class="pipeline-drawer__identity">
+              <div class="pipeline-aside__identity">
                 <h2 class="hrms-panel-name">{{ selected.candidate_name }}</h2>
                 <p class="hrms-panel-role">
                   {{ orEmpty(selected.current_designation) }}
@@ -302,7 +476,7 @@ function formatWhen(iso: string | null | undefined) {
               </div>
             </div>
 
-            <div class="hrms-info-grid pipeline-drawer__info">
+            <div class="hrms-info-grid pipeline-aside__info">
               <div class="hrms-info-item">
                 <span class="hrms-info-label">Job</span>
                 <span class="hrms-info-value">{{ selected.job_title }}</span>
@@ -313,7 +487,7 @@ function formatWhen(iso: string | null | undefined) {
               </div>
               <div class="hrms-info-item">
                 <span class="hrms-info-label">Email</span>
-                <span class="hrms-info-value pipeline-drawer__break">{{ selected.candidate_email || EMPTY }}</span>
+                <span class="hrms-info-value pipeline-aside__break">{{ selected.candidate_email || EMPTY }}</span>
               </div>
               <div class="hrms-info-item">
                 <span class="hrms-info-label">Phone</span>
@@ -333,17 +507,65 @@ function formatWhen(iso: string | null | undefined) {
                 <span class="hrms-info-label">Recruiter</span>
                 <span class="hrms-info-value">{{ selected.job_assignee_name || EMPTY }}</span>
               </div>
-              <div v-if="selected.offer_ctc != null" class="hrms-info-item">
-                <span class="hrms-info-label">Offer CTC</span>
-                <span class="hrms-info-value">{{ selected.offer_ctc }}</span>
+            </div>
+
+            <h3 class="pipeline-aside__section">Key dates &amp; offer</h3>
+            <div class="hrms-info-grid pipeline-aside__info">
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Applied</span>
+                <span class="hrms-info-value">{{ formatWhen(selected.applied_date) }}</span>
               </div>
-              <div v-if="selected.joined_date" class="hrms-info-item">
-                <span class="hrms-info-label">Joined</span>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Submitted</span>
+                <span class="hrms-info-value">{{ formatWhen(selected.submitted_at) }}</span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Interview scheduled</span>
+                <span class="hrms-info-value">{{ formatDateTime(selected.interview_scheduled_at) }}</span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Interview round</span>
+                <span class="hrms-info-value">
+                  {{
+                    selected.interview_round != null
+                      ? `Round ${selected.interview_round}${selected.interview_mode ? ` · ${selected.interview_mode}` : ''}`
+                      : EMPTY
+                  }}
+                </span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Interviewer</span>
+                <span class="hrms-info-value">{{ selected.interviewer_name || EMPTY }}</span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Interview status</span>
+                <span class="hrms-info-value">{{ selected.interview_status || EMPTY }}</span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Offer date</span>
+                <span class="hrms-info-value">{{ formatWhen(selected.offer_date) }}</span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Offer CTC</span>
+                <span class="hrms-info-value">
+                  {{ selected.offer_ctc != null ? formatInr(selected.offer_ctc) : EMPTY }}
+                </span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Expected joining</span>
+                <span class="hrms-info-value">{{ formatWhen(selected.offer_joining_date) }}</span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Offer status</span>
+                <span class="hrms-info-value">{{ selected.offer_status || EMPTY }}</span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Joined date</span>
                 <span class="hrms-info-value">{{ formatWhen(selected.joined_date) }}</span>
               </div>
             </div>
 
-            <div class="hrms-actions hrms-actions--inline pipeline-drawer__actions">
+            <div class="hrms-actions hrms-actions--inline pipeline-aside__actions">
               <button
                 v-if="nextStages.length"
                 type="button"
@@ -361,12 +583,12 @@ function formatWhen(iso: string | null | undefined) {
               >
                 → {{ stage }}
               </button>
-              <p v-if="!nextStages.length" class="pipeline-drawer__terminal">
+              <p v-if="!nextStages.length" class="pipeline-aside__terminal">
                 No further stage changes (terminal stage).
               </p>
             </div>
 
-            <h3 class="pipeline-drawer__section">Stage history</h3>
+            <h3 class="pipeline-aside__section">Stage history</h3>
             <div v-if="historyLoading" class="hrms-empty-inline">Loading history…</div>
             <ol v-else-if="history.length" class="pipeline-history">
               <li v-for="item in history" :key="item.id">
@@ -376,10 +598,10 @@ function formatWhen(iso: string | null | undefined) {
               </li>
             </ol>
             <p v-else class="hrms-empty-inline">No stage history yet.</p>
-          </aside>
-        </div>
+          </div>
+        </aside>
       </Transition>
-    </Teleport>
+    </div>
 
     <HrmsModal v-model="showMoveModal" title="Update pipeline stage" size="md">
       <div class="hrms-form-stack">
@@ -399,6 +621,29 @@ function formatWhen(iso: string | null | undefined) {
             placeholder="Interview feedback, client notes…"
           />
         </label>
+        <template v-if="targetStage === 'Interview'">
+          <label class="hrms-field">
+            <span>Interview scheduled</span>
+            <input v-model="interviewScheduledAt" type="datetime-local" class="hrms-input" />
+          </label>
+          <label class="hrms-field">
+            <span>Interviewer</span>
+            <input
+              v-model="interviewerName"
+              type="text"
+              class="hrms-input"
+              placeholder="Name of interviewer"
+            />
+          </label>
+          <label class="hrms-field">
+            <span>Mode</span>
+            <select v-model="interviewMode" class="hrms-input">
+              <option value="online">Online</option>
+              <option value="offline">Offline</option>
+              <option value="phone">Phone</option>
+            </select>
+          </label>
+        </template>
         <template v-if="targetStage === 'Offer'">
           <label class="hrms-field">
             <span>Offered CTC</span>
@@ -432,218 +677,257 @@ function formatWhen(iso: string | null | undefined) {
 </template>
 
 <style scoped>
+.pipeline-split {
+  height: 100%;
+  min-height: 0;
+}
+
+.pipeline-main {
+  padding: 0 4px;
+}
+
+.pipeline-main--rail {
+  flex: 1;
+}
+
 .pipeline-page {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
   gap: 12px;
+  padding: 16px 20px 20px;
 }
 
-.pipeline-board {
+.pipeline-filters {
   display: flex;
-  gap: 12px;
-  align-items: stretch;
-  overflow-x: auto;
-  padding-bottom: 12px;
-  flex: 1;
-  min-height: 0;
-}
-
-.pipeline-column {
-  flex: 0 0 280px;
-  display: flex;
-  flex-direction: column;
-  background: var(--hrms-surface-muted, rgba(15, 23, 42, 0.03));
-  border: 1px solid var(--hrms-border);
-  border-radius: 12px;
-  min-height: 420px;
-  max-height: calc(100vh - 220px);
-}
-
-.pipeline-column__header {
-  display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--hrms-border);
 }
 
-.pipeline-column__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.pipeline-column__title {
-  margin: 0;
-  font-size: 0.85rem;
-  font-weight: 650;
-  flex: 1;
-}
-
-.pipeline-column__count {
-  font-size: 0.75rem;
-  color: var(--hrms-text-muted);
+.pipeline-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--hrms-border);
   background: var(--hrms-surface, #fff);
   border-radius: 999px;
-  padding: 2px 8px;
-}
-
-.pipeline-column__body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.pipeline-column__empty {
-  margin: 24px 8px;
-  text-align: center;
-  font-size: 0.8rem;
-  color: var(--hrms-text-muted);
-}
-
-.pipeline-card {
-  text-align: left;
-  border: 1px solid var(--hrms-border);
-  background: var(--hrms-surface, #fff);
-  border-radius: 10px;
-  padding: 10px 12px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.pipeline-card:hover,
-.pipeline-card--active {
-  border-color: var(--hrms-primary);
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
-}
-
-.pipeline-card__top {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.pipeline-card__identity {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.pipeline-card__identity strong {
-  font-size: 0.875rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.pipeline-card__identity span {
+  padding: 5px 10px;
   font-size: 0.75rem;
+  font-weight: 550;
   color: var(--hrms-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  cursor: pointer;
 }
 
-.pipeline-card__meta {
+.pipeline-filter span {
+  min-width: 1.25rem;
+  text-align: center;
+  border-radius: 999px;
+  background: var(--hrms-surface-muted, rgba(15, 23, 42, 0.05));
+  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pipeline-filter__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.pipeline-filter--active {
+  border-color: var(--hrms-primary);
+  color: var(--hrms-primary-dark, var(--hrms-primary));
+  background: color-mix(in srgb, var(--hrms-primary) 8%, white);
+}
+
+.pipeline-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--hrms-border);
+  border-radius: 12px;
+  background: var(--hrms-surface, #fff);
+}
+
+.pipeline-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  min-width: 900px;
+}
+
+.pipeline-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--hrms-text-muted);
+  background: var(--hrms-surface-muted, #f8fafc);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hrms-border);
+  white-space: nowrap;
+}
+
+.pipeline-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hrms-border);
+  vertical-align: middle;
+}
+
+.pipeline-table__row {
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.pipeline-table__row:hover,
+.pipeline-table__row--active {
+  background: color-mix(in srgb, var(--hrms-primary) 5%, white);
+}
+
+.pipeline-table__person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 160px;
+}
+
+.pipeline-table__person-text,
+.pipeline-table__stack {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+}
+
+.pipeline-table__person-text strong,
+.pipeline-table__stack strong {
+  font-size: 0.84rem;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pipeline-table__person-text span,
+.pipeline-table__stack span {
   font-size: 0.72rem;
   color: var(--hrms-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.pipeline-card__recruiter {
-  font-size: 0.7rem;
-  color: var(--hrms-primary);
-  font-weight: 500;
+.pipeline-table__email {
+  max-width: 140px;
 }
 
-.pipeline-drawer-root {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
+.pipeline-table__actions {
   display: flex;
+  gap: 6px;
   justify-content: flex-end;
-  pointer-events: none;
+  white-space: nowrap;
 }
 
-.pipeline-drawer__backdrop {
-  position: absolute;
-  inset: 0;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  background: rgba(15, 23, 42, 0.45);
-  cursor: pointer;
-  pointer-events: auto;
+.pipeline-aside {
+  transition: width 0.25s ease, min-width 0.25s ease, max-width 0.25s ease;
 }
 
-.pipeline-drawer {
-  position: relative;
-  width: min(420px, 100%);
-  height: 100%;
-  max-height: 100dvh;
-  background: var(--hrms-surface, #fff);
-  border-left: 1px solid var(--hrms-border);
-  padding: 16px 20px 28px;
-  z-index: 1;
-  box-shadow: -8px 0 24px rgba(15, 23, 42, 0.12);
-  pointer-events: auto;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+.pipeline-aside--collapsed {
+  width: 56px;
+  min-width: 56px;
+  max-width: 56px;
 }
 
-.pipeline-drawer__header {
+.pipeline-aside__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 8px;
+  padding: 12px 12px 8px;
+  flex-shrink: 0;
 }
 
-.pipeline-drawer__heading {
+.pipeline-aside--collapsed .pipeline-aside__header {
+  flex-direction: column;
+  padding: 10px 6px;
+}
+
+.pipeline-aside__heading {
   margin: 0;
+  flex: 1;
   font-size: 0.95rem;
   font-weight: 650;
 }
 
-.pipeline-drawer__identity {
+.pipeline-aside__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 18px 24px;
+}
+
+.pipeline-aside__identity {
   min-width: 0;
   flex: 1;
 }
 
-.pipeline-drawer__info {
+.pipeline-aside__info {
   margin: 16px 0;
 }
 
-.pipeline-drawer__actions {
+.pipeline-aside__actions {
   margin-bottom: 20px;
   flex-wrap: wrap;
 }
 
-.pipeline-drawer__break {
+.pipeline-aside__break {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-.pipeline-drawer__terminal {
+.pipeline-aside__terminal {
   margin: 0;
   font-size: 0.8rem;
   color: var(--hrms-text-muted);
 }
 
-.pipeline-drawer__section {
+.pipeline-aside__section {
   margin: 0 0 10px;
   font-size: 0.9rem;
+}
+
+.pipeline-aside__rail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 6px 16px;
+  cursor: pointer;
+}
+
+.pipeline-aside__rail-name {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--hrms-text);
+  max-height: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pipeline-aside__rail-stage {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .pipeline-history {
@@ -693,56 +977,39 @@ function formatWhen(iso: string | null | undefined) {
 
 .panel-enter-active,
 .panel-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.panel-enter-active .pipeline-drawer,
-.panel-leave-active .pipeline-drawer {
-  transition: transform 0.25s ease;
+  transition: opacity 0.2s ease, transform 0.25s ease;
 }
 
 .panel-enter-from,
 .panel-leave-to {
   opacity: 0;
+  transform: translateX(16px);
 }
 
-.panel-enter-from .pipeline-drawer,
-.panel-leave-to .pipeline-drawer {
-  transform: translateX(24px);
+@media (max-width: 900px) {
+  .pipeline-aside:not(.pipeline-aside--collapsed) {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 20;
+    width: min(420px, 92vw);
+    max-width: none;
+    box-shadow: -8px 0 24px rgba(15, 23, 42, 0.12);
+  }
+
+  .pipeline-split {
+    position: relative;
+  }
 }
 
 @media (max-width: 720px) {
-  .pipeline-drawer-root {
-    align-items: flex-end;
-  }
-
-  .pipeline-drawer {
-    width: 100%;
-    height: min(92dvh, 100%);
-    max-height: 92dvh;
-    border-left: none;
-    border-radius: 16px 16px 0 0;
-    padding: 12px 16px 28px;
-    box-shadow: 0 -8px 28px rgba(15, 23, 42, 0.18);
-  }
-
-  .panel-enter-from .pipeline-drawer,
-  .panel-leave-to .pipeline-drawer {
-    transform: translateY(28px);
-  }
-
-  .pipeline-drawer .hrms-panel-hero {
+  .pipeline-aside .hrms-panel-hero {
     flex-wrap: wrap;
   }
 
-  .pipeline-drawer .hrms-info-grid {
+  .pipeline-aside .hrms-info-grid {
     grid-template-columns: 1fr;
-  }
-
-  .pipeline-column {
-    flex: 0 0 min(260px, 78vw);
-    min-height: 360px;
-    max-height: calc(100dvh - 200px);
   }
 }
 

@@ -70,6 +70,9 @@ def move_stage(
         joining_date=payload.joining_date,
         joined_date=payload.joined_date,
         revenue_generated=payload.revenue_generated,
+        interview_scheduled_at=payload.interview_scheduled_at,
+        interviewer_name=payload.interviewer_name,
+        interview_mode=payload.interview_mode,
     )
 
 

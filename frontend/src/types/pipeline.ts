@@ -28,7 +28,14 @@ export interface PipelineCard {
   applied_date: string | null
   submitted_at: string | null
   remarks: string | null
+  interview_round: number | null
+  interview_scheduled_at: string | null
+  interview_mode: string | null
+  interview_status: string | null
+  interviewer_name: string | null
   offer_ctc: number | null
+  offer_date: string | null
+  offer_status: string | null
   offer_joining_date: string | null
   joined_date: string | null
 }
@@ -73,6 +80,9 @@ export interface PipelineMovePayload {
   joining_date?: string | null
   joined_date?: string | null
   revenue_generated?: number | null
+  interview_scheduled_at?: string | null
+  interviewer_name?: string | null
+  interview_mode?: string | null
 }
 
 export interface ShareApprovedPayload {

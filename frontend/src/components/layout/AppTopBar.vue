@@ -3,6 +3,10 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+const props = defineProps<{
+  sidebarCollapsed?: boolean
+}>()
+
 defineEmits<{
   toggleSidebar: []
 }>()
@@ -61,7 +65,8 @@ function handleLogout() {
       <button
         type="button"
         class="topbar__menu-btn"
-        aria-label="Toggle navigation menu"
+        :aria-label="props.sidebarCollapsed ? 'Expand navigation' : 'Toggle navigation menu'"
+        :title="props.sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'"
         @click="$emit('toggleSidebar')"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -528,7 +533,7 @@ function handleLogout() {
 
 @media (min-width: 1024px) {
   .topbar__menu-btn {
-    display: none;
+    display: flex;
   }
 }
 

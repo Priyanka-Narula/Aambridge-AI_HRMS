@@ -42,6 +42,7 @@ export const designTokens = {
   },
   layout: {
     sidebarWidth: '260px',
+    sidebarCollapsedWidth: '72px',
     topbarHeight: '64px',
     footerHeight: '44px',
     pageMaxWidth: '1200px',

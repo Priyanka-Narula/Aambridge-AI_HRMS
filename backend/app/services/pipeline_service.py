@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from fastapi import HTTPException, status
@@ -14,7 +14,12 @@ from app.core.security import ROLE_OWNER, ROLE_RECRUITER, normalize_role
 from app.models.candidate import Candidate
 from app.models.job_requirement import JobRequirement
 from app.models.offer import Offer, Placement
-from app.models.pipeline import ApplicationStageHistory, CandidateApplication, PipelineStage
+from app.models.pipeline import (
+    ApplicationStageHistory,
+    CandidateApplication,
+    Interview,
+    PipelineStage,
+)
 from app.models.user_access import Client, Recruiter, User
 from app.services.email_service import email_configured, send_email_with_attachment
 
@@ -32,6 +37,7 @@ BOARD_STAGE_NAMES = [
 
 STAGE_APPLIED = "Applied"
 STAGE_SHORTLISTED = "Shortlisted"
+STAGE_INTERVIEW = "Interview"
 STAGE_OFFER = "Offer"
 STAGE_JOINED = "Joined"
 STAGE_REJECTED = "Rejected"
@@ -94,6 +100,7 @@ def _load_app_for_pipeline(db: Session, app_id: uuid.UUID) -> CandidateApplicati
             joinedload(CandidateApplication.current_stage_rel),
             joinedload(CandidateApplication.offer),
             joinedload(CandidateApplication.placement),
+            joinedload(CandidateApplication.interviews),
         )
         .filter(CandidateApplication.id == app_id)
         .first()
@@ -101,6 +108,19 @@ def _load_app_for_pipeline(db: Session, app_id: uuid.UUID) -> CandidateApplicati
     if not app:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
     return app
+
+
+def _latest_interview(app: CandidateApplication) -> Interview | None:
+    interviews = list(app.interviews or [])
+    if not interviews:
+        return None
+    return max(
+        interviews,
+        key=lambda i: (
+            i.interview_round or 0,
+            i.scheduled_datetime.timestamp() if i.scheduled_datetime else float("-inf"),
+        ),
+    )
 
 
 def _assert_can_manage_application(
@@ -173,7 +193,10 @@ def serialize_pipeline_card(
 
     offer_ctc = app.offer.offered_ctc if app.offer else None
     offer_joining = app.offer.joining_date if app.offer else None
+    offer_date = app.offer.offer_date if app.offer else None
+    offer_status = app.offer.status if app.offer else None
     joined = app.placement.joined_date if app.placement else None
+    interview = _latest_interview(app)
 
     return {
         "id": app.id,
@@ -202,7 +225,14 @@ def serialize_pipeline_card(
         "applied_date": app.applied_date,
         "submitted_at": app.submitted_at,
         "remarks": None,
+        "interview_round": interview.interview_round if interview else None,
+        "interview_scheduled_at": interview.scheduled_datetime if interview else None,
+        "interview_mode": interview.mode if interview else None,
+        "interview_status": interview.status if interview else None,
+        "interviewer_name": interview.interviewer_name if interview else None,
         "offer_ctc": offer_ctc,
+        "offer_date": offer_date,
+        "offer_status": offer_status,
         "offer_joining_date": offer_joining,
         "joined_date": joined,
     }
@@ -225,6 +255,7 @@ def get_pipeline_board(
             joinedload(CandidateApplication.current_stage_rel),
             joinedload(CandidateApplication.offer),
             joinedload(CandidateApplication.placement),
+            joinedload(CandidateApplication.interviews),
         )
         .filter(CandidateApplication.current_stage.in_(stage_ids))
         .filter(CandidateApplication.owner_status == "approved")
@@ -387,6 +418,9 @@ def move_application_stage(
     joining_date: date | None = None,
     joined_date: date | None = None,
     revenue_generated: Decimal | None = None,
+    interview_scheduled_at: datetime | None = None,
+    interviewer_name: str | None = None,
+    interview_mode: str | None = None,
 ) -> dict:
     app = _load_app_for_pipeline(db, app_id)
     jr = _assert_can_manage_application(db, app, current_user)
@@ -439,6 +473,19 @@ def move_application_stage(
         app.status = "joined"
     else:
         app.status = "active"
+
+    if target.name == STAGE_INTERVIEW:
+        existing = list(app.interviews or [])
+        next_round = (max((i.interview_round for i in existing), default=0) + 1)
+        interview = Interview(
+            application_id=app.id,
+            interview_round=next_round,
+            interviewer_name=(interviewer_name or "").strip() or None,
+            scheduled_datetime=interview_scheduled_at,
+            mode=(interview_mode or "").strip() or "online",
+            status="scheduled",
+        )
+        db.add(interview)
 
     if target.name == STAGE_OFFER:
         if not app.offer:

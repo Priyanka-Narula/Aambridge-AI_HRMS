@@ -39,7 +39,14 @@ class PipelineCardResponse(BaseModel):
     applied_date: date | None = None
     submitted_at: datetime | None = None
     remarks: str | None = None
+    interview_round: int | None = None
+    interview_scheduled_at: datetime | None = None
+    interview_mode: str | None = None
+    interview_status: str | None = None
+    interviewer_name: str | None = None
     offer_ctc: Decimal | None = None
+    offer_date: date | None = None
+    offer_status: str | None = None
     offer_joining_date: date | None = None
     joined_date: date | None = None
 
@@ -84,6 +91,9 @@ class PipelineMoveRequest(BaseModel):
     joining_date: date | None = None
     joined_date: date | None = None
     revenue_generated: Decimal | None = None
+    interview_scheduled_at: datetime | None = None
+    interviewer_name: str | None = None
+    interview_mode: str | None = None
 
 
 class ShortlistRequest(BaseModel):
