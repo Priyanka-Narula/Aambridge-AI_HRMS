@@ -63,6 +63,11 @@ export interface JobRequirementListItem {
   created_by: string
   created_at?: string | null
   client_submission_format?: SubmissionField[] | null
+  submitted_candidates: number
+  pipeline_candidates: number
+  joined_candidates: number
+  remaining_positions: number | null
+  submissions_enabled: boolean
 }
 
 export interface JobRequirementCreatePayload {

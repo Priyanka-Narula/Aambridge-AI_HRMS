@@ -370,7 +370,7 @@ async function handleAddToPipeline(sub?: CandidateSubmission) {
     )
     success.value =
       targets.length === 1
-        ? `${targets[0].candidate_name} added to pipeline (Applied)`
+        ? `${targets[0]!.candidate_name} added to pipeline (Applied)`
         : `${targets.length} candidates added to pipeline (Applied)`
     await load()
   } catch (err) {

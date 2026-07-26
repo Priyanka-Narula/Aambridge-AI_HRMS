@@ -22,6 +22,7 @@ from app.models.pipeline import (
 )
 from app.models.user_access import Client, Recruiter, User
 from app.services.email_service import email_configured, send_email_with_attachment
+from app.services.job_requirement_service import close_job_if_fulfilled
 
 # Stages shown on the hiring board. Applied is the entry stage for approved candidates.
 BOARD_STAGE_NAMES = [
@@ -507,6 +508,14 @@ def move_application_stage(
                 app.offer.offer_date = date.today()
 
     if target.name == STAGE_JOINED:
+        # Serialize fulfillment updates for this job so concurrent joins cannot
+        # both observe a stale joined count.
+        jr = (
+            db.query(JobRequirement)
+            .filter(JobRequirement.id == app.job_requirement_id)
+            .with_for_update()
+            .one()
+        )
         if app.offer:
             app.offer.status = "accepted"
             if joining_date is not None:
@@ -533,6 +542,9 @@ def move_application_stage(
             candidate.candidate_status = "inactive"
 
     _record_history(db, app, target, current_user.id, remarks)
+    if target.name == STAGE_JOINED:
+        db.flush()
+        close_job_if_fulfilled(db, jr)
     db.commit()
 
     app = _load_app_for_pipeline(db, app.id)

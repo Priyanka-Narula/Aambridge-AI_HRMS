@@ -13,6 +13,10 @@ from app.models.candidate import Candidate
 from app.models.job_requirement import JobRequirement
 from app.models.pipeline import CandidateApplication, PipelineStage
 from app.models.user_access import Client, Recruiter, User
+from app.services.job_requirement_service import (
+    get_job_pipeline_metric,
+    is_job_fulfilled,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -283,6 +287,21 @@ def submit_candidate(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not assigned to this job requirement",
+        )
+
+    if jr.status != "open":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Candidate submissions are disabled because this job requirement is closed",
+        )
+
+    joined_candidates = get_job_pipeline_metric(db, jr.id)["joined_candidates"]
+    if is_job_fulfilled(jr, joined_candidates):
+        jr.status = "closed"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Candidate submissions are disabled because all open positions are filled",
         )
 
     candidate = _load_candidate(db, candidate_id)

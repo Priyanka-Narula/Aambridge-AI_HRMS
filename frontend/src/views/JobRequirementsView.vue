@@ -338,13 +338,20 @@ function experienceLabel(item: JobRequirementListItem): string {
               <span v-if="item.location">{{ item.location }}</span>
               <span v-if="item.priority">{{ item.priority }}</span>
             </div>
+            <div class="job-pipeline-metrics">
+              <span><strong>{{ item.pipeline_candidates }}</strong> in pipeline</span>
+              <span><strong>{{ item.joined_candidates }}</strong> joined</span>
+              <span>
+                <strong>{{ item.remaining_positions ?? EMPTY }}</strong> remaining
+              </span>
+            </div>
             <button
               type="button"
               class="hrms-btn hrms-btn--sm hrms-btn--primary"
               style="margin-top: 10px"
               @click.stop="router.push({ name: 'job-requirement-detail', params: { id: item.id } })"
             >
-              View / Submit Candidates
+              {{ item.submissions_enabled ? 'View / Submit Candidates' : 'View Candidates' }}
             </button>
           </div>
         </div>
@@ -445,6 +452,20 @@ function experienceLabel(item: JobRequirementListItem): string {
               <div class="hrms-info-item">
                 <span class="hrms-info-label">Open positions</span>
                 <span class="hrms-info-value">{{ orEmpty(selected.open_positions?.toString()) }}</span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Candidates in pipeline</span>
+                <span class="hrms-info-value">{{ selected.pipeline_candidates }}</span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Joined candidates</span>
+                <span class="hrms-info-value">
+                  {{ selected.joined_candidates }} / {{ selected.open_positions ?? EMPTY }}
+                </span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Positions remaining</span>
+                <span class="hrms-info-value">{{ selected.remaining_positions ?? EMPTY }}</span>
               </div>
               <div class="hrms-info-item">
                 <span class="hrms-info-label">Priority</span>
@@ -565,3 +586,25 @@ function experienceLabel(item: JobRequirementListItem): string {
     </HrmsModal>
   </div>
 </template>
+
+<style scoped>
+.job-pipeline-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.job-pipeline-metrics span {
+  padding: 4px 8px;
+  border: 1px solid var(--hrms-border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: var(--hrms-text-muted);
+  background: var(--hrms-surface-muted);
+}
+
+.job-pipeline-metrics strong {
+  color: var(--hrms-text);
+}
+</style>

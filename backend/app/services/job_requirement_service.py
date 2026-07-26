@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import HTTPException, status
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.schemas.job_requirement import (
@@ -10,7 +11,92 @@ from app.api.schemas.job_requirement import (
 )
 from app.core.security import ROLE_OWNER, ROLE_RECRUITER, normalize_role
 from app.models.job_requirement import JobRequirement
+from app.models.offer import Placement
+from app.models.pipeline import CandidateApplication
 from app.models.user_access import Client, User
+
+
+def get_job_pipeline_metrics(
+    db: Session,
+    requirement_ids: list[uuid.UUID] | set[uuid.UUID],
+) -> dict[uuid.UUID, dict[str, int]]:
+    """Return submission, pipeline, and joined counts without join multiplication."""
+    ids = list(requirement_ids)
+    if not ids:
+        return {}
+
+    metrics: dict[uuid.UUID, dict[str, int]] = {
+        requirement_id: {
+            "submitted_candidates": 0,
+            "pipeline_candidates": 0,
+            "joined_candidates": 0,
+        }
+        for requirement_id in ids
+    }
+
+    application_rows = (
+        db.query(
+            CandidateApplication.job_requirement_id,
+            func.count(CandidateApplication.id),
+            func.sum(
+                case(
+                    (
+                        CandidateApplication.in_pipeline.is_(True),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ),
+        )
+        .filter(CandidateApplication.job_requirement_id.in_(ids))
+        .group_by(CandidateApplication.job_requirement_id)
+        .all()
+    )
+    for requirement_id, submitted_count, pipeline_count in application_rows:
+        metrics[requirement_id]["submitted_candidates"] = int(submitted_count or 0)
+        metrics[requirement_id]["pipeline_candidates"] = int(pipeline_count or 0)
+
+    joined_rows = (
+        db.query(
+            CandidateApplication.job_requirement_id,
+            func.count(Placement.id),
+        )
+        .join(Placement, Placement.application_id == CandidateApplication.id)
+        .filter(
+            CandidateApplication.job_requirement_id.in_(ids),
+            Placement.joined_date.is_not(None),
+        )
+        .group_by(CandidateApplication.job_requirement_id)
+        .all()
+    )
+    for requirement_id, joined_count in joined_rows:
+        metrics[requirement_id]["joined_candidates"] = int(joined_count or 0)
+
+    return metrics
+
+
+def get_job_pipeline_metric(db: Session, requirement_id: uuid.UUID) -> dict[str, int]:
+    return get_job_pipeline_metrics(db, [requirement_id])[requirement_id]
+
+
+def is_job_fulfilled(
+    requirement: JobRequirement,
+    joined_candidates: int,
+) -> bool:
+    return bool(
+        requirement.open_positions is not None
+        and requirement.open_positions > 0
+        and joined_candidates >= requirement.open_positions
+    )
+
+
+def close_job_if_fulfilled(db: Session, requirement: JobRequirement) -> bool:
+    """Close a job once its joined count reaches its required positions."""
+    joined_candidates = get_job_pipeline_metric(db, requirement.id)["joined_candidates"]
+    if is_job_fulfilled(requirement, joined_candidates):
+        requirement.status = "closed"
+        return True
+    return False
 
 
 def _query(db: Session):
@@ -154,6 +240,8 @@ def update_job_requirement(
         if field in data:
             setattr(requirement, field, data[field])
 
+    db.flush()
+    close_job_if_fulfilled(db, requirement)
     db.commit()
     return _query(db).filter(JobRequirement.id == requirement.id).one()
 
@@ -168,12 +256,25 @@ def update_job_requirement_status(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
     requirement = get_job_requirement(db, requirement_id, current_user)
+    if payload.status == "open":
+        joined_candidates = get_job_pipeline_metric(db, requirement.id)["joined_candidates"]
+        if is_job_fulfilled(requirement, joined_candidates):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "This job cannot be reopened because all positions are filled. "
+                    "Increase the number of open positions first."
+                ),
+            )
     requirement.status = payload.status
     db.commit()
     return _query(db).filter(JobRequirement.id == requirement.id).one()
 
 
-def serialize_job_requirement(requirement: JobRequirement) -> dict:
+def serialize_job_requirement(
+    requirement: JobRequirement,
+    pipeline_metrics: dict[str, int] | None = None,
+) -> dict:
     import json
 
     assignee = requirement.assignee
@@ -187,6 +288,22 @@ def serialize_job_requirement(requirement: JobRequirement) -> dict:
             client_submission_format = json.loads(requirement.client.submission_format)
         except (json.JSONDecodeError, TypeError):
             client_submission_format = None
+
+    metrics = pipeline_metrics or {
+        "submitted_candidates": 0,
+        "pipeline_candidates": 0,
+        "joined_candidates": 0,
+    }
+    joined_candidates = metrics["joined_candidates"]
+    remaining_positions = (
+        max(requirement.open_positions - joined_candidates, 0)
+        if requirement.open_positions is not None
+        else None
+    )
+    submissions_enabled = requirement.status == "open" and not is_job_fulfilled(
+        requirement,
+        joined_candidates,
+    )
 
     return {
         "id": requirement.id,
@@ -211,4 +328,9 @@ def serialize_job_requirement(requirement: JobRequirement) -> dict:
         "created_by": requirement.created_by,
         "created_at": requirement.created_at,
         "client_submission_format": client_submission_format,
+        "submitted_candidates": metrics["submitted_candidates"],
+        "pipeline_candidates": metrics["pipeline_candidates"],
+        "joined_candidates": joined_candidates,
+        "remaining_positions": remaining_positions,
+        "submissions_enabled": submissions_enabled,
     }
