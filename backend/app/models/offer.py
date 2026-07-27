@@ -39,7 +39,7 @@ class Placement(Base):
     client_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("clients.id"), nullable=False
     )
-    joined_date: Mapped[date | None] = mapped_column(Date)
+    joined_date: Mapped[date | None] = mapped_column(Date, index=True)
     revenue_generated: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     invoice_status: Mapped[str | None] = mapped_column(String(50))
 

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useNotificationsStore } from '@/stores/notifications'
 
 const props = defineProps<{
   sidebarCollapsed?: boolean
@@ -13,6 +14,7 @@ defineEmits<{
 
 const router = useRouter()
 const auth = useAuthStore()
+const notifications = useNotificationsStore()
 const showUserMenu = ref(false)
 const showNotifications = ref(false)
 
@@ -26,11 +28,26 @@ const avatarInitials = computed(() => {
   return `${auth.user.first_name[0]}${auth.user.last_name[0]}`.toUpperCase()
 })
 
-const notifications = [
-  { id: 1, text: 'New candidate applied for Senior Developer', time: '5m ago' },
-  { id: 2, text: 'Interview scheduled with Elena Brooks', time: '1h ago' },
-  { id: 3, text: 'Pipeline stage updated: Offer Extended', time: '3h ago' },
-]
+function notificationTone(type: string) {
+  if (type === 'candidate.rejected' || type === 'job.closed') return 'danger'
+  if (type === 'placement.completed' || type === 'candidate.approved') return 'success'
+  return 'default'
+}
+
+function formatNotifTime(iso: string | null) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const diffMs = Date.now() - d.getTime()
+  const mins = Math.floor(diffMs / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+}
 
 function onDateChange(field: 'start' | 'end', event: Event) {
   const value = (event.target as HTMLInputElement).value
@@ -45,6 +62,9 @@ function toggleUserMenu() {
 function toggleNotifications() {
   showNotifications.value = !showNotifications.value
   showUserMenu.value = false
+  if (showNotifications.value && !notifications.items.length) {
+    void notifications.load()
+  }
 }
 
 function closeMenus() {
@@ -57,6 +77,10 @@ function handleLogout() {
   auth.logout()
   router.push({ name: 'login' })
 }
+
+onMounted(() => {
+  void notifications.load()
+})
 </script>
 
 <template>
@@ -121,17 +145,35 @@ function handleLogout() {
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
-          <span v-if="auth.notificationCount > 0" class="topbar__badge-count">
-            {{ auth.notificationCount }}
+          <span v-if="notifications.unreadCount > 0" class="topbar__badge-count">
+            {{ notifications.unreadCount > 9 ? '9+' : notifications.unreadCount }}
           </span>
         </button>
 
         <div v-if="showNotifications" class="topbar__dropdown topbar__dropdown--notifications">
-          <div class="topbar__dropdown-header">Notifications</div>
-          <ul class="topbar__notif-list">
-            <li v-for="n in notifications" :key="n.id" class="topbar__notif-item">
-              <p>{{ n.text }}</p>
-              <span>{{ n.time }}</span>
+          <div class="topbar__dropdown-header">
+            <span>Notifications</span>
+            <em v-if="notifications.unreadCount">{{ notifications.unreadCount }} new</em>
+          </div>
+          <div v-if="notifications.loading && !notifications.items.length" class="topbar__notif-empty">
+            Loading…
+          </div>
+          <div v-else-if="!notifications.items.length" class="topbar__notif-empty">
+            You're all caught up
+          </div>
+          <ul v-else class="topbar__notif-list">
+            <li
+              v-for="n in notifications.items"
+              :key="n.id"
+              class="topbar__notif-item"
+              :data-tone="notificationTone(n.type)"
+            >
+              <i class="topbar__notif-dot" aria-hidden="true" />
+              <div class="topbar__notif-body">
+                <p>{{ n.title }}</p>
+                <span>{{ n.description }}</span>
+                <time>{{ formatNotifTime(n.created_at) }}</time>
+              </div>
             </li>
           </ul>
         </div>
@@ -420,37 +462,93 @@ function handleLogout() {
 }
 
 .topbar__dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 14px 16px;
   font-weight: 600;
   font-size: 0.9rem;
   border-bottom: 1px solid var(--hrms-border);
 }
 
+.topbar__dropdown-header em {
+  font-style: normal;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--hrms-primary);
+  background: var(--hrms-secondary);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.topbar__notif-empty {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--hrms-text-muted);
+}
+
 .topbar__notif-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 240px;
+  max-height: 320px;
   overflow-y: auto;
 }
 
 .topbar__notif-item {
+  display: flex;
+  gap: 10px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--hrms-border);
+  transition: background var(--hrms-transition);
+}
+
+.topbar__notif-item:hover {
+  background: color-mix(in srgb, var(--hrms-secondary) 60%, white);
 }
 
 .topbar__notif-item:last-child {
   border-bottom: none;
 }
 
-.topbar__notif-item p {
-  margin: 0 0 4px;
-  font-size: 0.85rem;
-  line-height: 1.4;
+.topbar__notif-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+  background: var(--hrms-primary);
 }
 
-.topbar__notif-item span {
-  font-size: 0.75rem;
+.topbar__notif-item[data-tone='success'] .topbar__notif-dot {
+  background: #22c55e;
+}
+
+.topbar__notif-item[data-tone='danger'] .topbar__notif-dot {
+  background: #ef4444;
+}
+
+.topbar__notif-body p {
+  margin: 0 0 2px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--hrms-text);
+}
+
+.topbar__notif-body span {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--hrms-text-muted);
+  line-height: 1.35;
+}
+
+.topbar__notif-body time {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
   color: var(--hrms-text-muted);
 }
 

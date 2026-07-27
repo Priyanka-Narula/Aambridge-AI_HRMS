@@ -399,7 +399,22 @@ def approve_submission(
     app = _load_application(db, app_id)
     app.owner_status = action
     db.commit()
-    return _load_application_with_full_relations(db, app.id)
+    updated = _load_application_with_full_relations(db, app.id)
+    try:
+        from app.services.dashboard_events import (
+            WIDGETS_CANDIDATE_DECISION,
+            publish_dashboard_event,
+        )
+
+        event = "candidate.approved" if action == "approved" else "candidate.rejected"
+        publish_dashboard_event(
+            event,
+            WIDGETS_CANDIDATE_DECISION,
+            {"application_id": str(app_id), "action": action},
+        )
+    except Exception:
+        pass
+    return updated
 
 
 # ---------------------------------------------------------------------------

@@ -7,7 +7,18 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.routes import attendance, auth, candidates, clients, cv, job_requirements, pipeline, submissions, users
+from app.api.routes import (
+    attendance,
+    auth,
+    candidates,
+    clients,
+    cv,
+    dashboard,
+    job_requirements,
+    pipeline,
+    submissions,
+    users,
+)
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.core.deps import get_current_user
@@ -347,3 +358,4 @@ app.include_router(cv.router, dependencies=[Depends(get_current_user)])
 app.include_router(candidates.router, dependencies=[Depends(get_current_user)])
 app.include_router(submissions.router)
 app.include_router(pipeline.router)
+app.include_router(dashboard.router)

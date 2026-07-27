@@ -1,13 +1,20 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
+import DashboardSocket from '@/components/dashboard/DashboardSocket.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppTopBar from '@/components/layout/AppTopBar.vue'
+import { useDashboardLiveStore } from '@/stores/dashboardLive'
+import { useNotificationsStore } from '@/stores/notifications'
 
 const SIDEBAR_COLLAPSED_KEY = 'hrms.sidebarCollapsed'
 
 const sidebarOpen = ref(false)
 const sidebarCollapsed = ref(false)
+const live = useDashboardLiveStore()
+const notifications = useNotificationsStore()
+
+let unsubscribeLive: (() => void) | undefined
 
 onMounted(() => {
   try {
@@ -15,6 +22,15 @@ onMounted(() => {
   } catch {
     sidebarCollapsed.value = false
   }
+
+  unsubscribeLive = live.subscribe((event) => {
+    if (event.type === 'connected') return
+    notifications.refreshIfNeeded(event.widgets)
+  })
+})
+
+onUnmounted(() => {
+  unsubscribeLive?.()
 })
 
 watch(sidebarCollapsed, (collapsed) => {
@@ -59,6 +75,7 @@ function closeSidebar() {
     />
 
     <div class="dashboard-layout__main">
+      <DashboardSocket class="dashboard-layout__socket" />
       <AppTopBar
         :sidebar-collapsed="sidebarCollapsed"
         @toggle-sidebar="toggleSidebar"
@@ -101,6 +118,15 @@ function closeSidebar() {
 .dashboard-layout__content:has(.hrms-split) {
   padding: 0;
   overflow: hidden;
+}
+
+.dashboard-layout__socket {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 @media (min-width: 1024px) {

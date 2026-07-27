@@ -1,0 +1,110 @@
+export type DashboardRole = 'owner' | 'recruiter'
+
+export interface NamedCount {
+  label: string
+  value: number
+}
+
+export interface PipelineStageStat {
+  name: string
+  count: number
+  order_no: number
+}
+
+export interface HeatmapCell {
+  dow: number
+  hour: number
+  value: number
+}
+
+export interface DashboardKpis {
+  total_candidates: number
+  active_candidates: number
+  inactive_candidates: number
+  pending_approval: number
+  approved_candidates: number
+  rejected_candidates: number
+  submissions_pending: number
+  submissions_approved: number
+  submissions_rejected: number
+  total_recruiters: number
+  active_recruiters: number
+  total_clients: number
+  open_jobs: number
+  closed_jobs: number
+  placements: number
+  monthly_placements: number
+  revenue: number
+  average_time_to_hire_days: number | null
+  in_pipeline: number
+  my_candidates: number
+  approved: number
+  rejected: number
+  interviews_scheduled: number
+  offers: number
+  clients_assigned: number
+  jobs_assigned: number
+}
+
+export interface DashboardCharts {
+  pipeline_stages: PipelineStageStat[]
+  candidate_status: NamedCount[]
+  recruiter_performance: NamedCount[]
+  client_placements: NamedCount[]
+  recruiter_activity_heatmap: HeatmapCell[]
+  candidate_uploads_monthly: NamedCount[]
+  placements_monthly: NamedCount[]
+  interviews_vs_offers: NamedCount[]
+}
+
+export interface DashboardTables {
+  recent_placements: Array<Record<string, unknown>>
+  recent_activities: Array<Record<string, unknown>>
+  notifications: Array<Record<string, unknown>>
+  recent_candidates: Array<Record<string, unknown>>
+  pending_tasks: Array<Record<string, unknown>>
+  todays_interviews: Array<Record<string, unknown>>
+  upcoming_interviews: Array<Record<string, unknown>>
+  recent_feedback: Array<Record<string, unknown>>
+}
+
+export interface AnalyticsDashboard {
+  role: DashboardRole
+  kpis: DashboardKpis
+  charts: DashboardCharts
+  tables: DashboardTables
+}
+
+/** Legacy compact stats */
+export interface DashboardStats {
+  open_jobs: number
+  closed_jobs: number
+  active_candidates: number
+  submissions_total: number
+  submissions_pending: number
+  submissions_approved: number
+  in_pipeline: number
+  interviews_scheduled: number
+  offers_pending: number
+  joined: number
+  pipeline_stages: PipelineStageStat[]
+}
+
+export interface DashboardWsEvent {
+  type: string
+  widgets?: string[]
+  detail?: Record<string, unknown>
+}
+
+export interface DashboardNotification {
+  id: string
+  type: string
+  title: string
+  description: string
+  created_at: string | null
+}
+
+export interface DashboardNotificationsResponse {
+  items: DashboardNotification[]
+  unread_count: number
+}

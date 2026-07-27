@@ -142,7 +142,24 @@ def create_candidate_record(db: Session, payload: CandidateCreate) -> Candidate:
     _apply_education(db, candidate, payload.education_records)
     _apply_work_experience(db, candidate, payload.work_experiences)
     db.commit()
-    return get_candidate_or_404(db, candidate.id)
+    candidate = get_candidate_or_404(db, candidate.id)
+    try:
+        from app.services.dashboard_events import (
+            WIDGETS_CANDIDATE_UPLOAD,
+            publish_dashboard_event,
+        )
+
+        publish_dashboard_event(
+            "candidate.uploaded",
+            WIDGETS_CANDIDATE_UPLOAD,
+            {
+                "candidate_id": str(candidate.id),
+                "name": f"{candidate.first_name} {candidate.last_name}".strip(),
+            },
+        )
+    except Exception:
+        pass
+    return candidate
 
 
 def update_candidate_record(db: Session, candidate_id: uuid.UUID, payload: CandidateUpdate) -> Candidate:

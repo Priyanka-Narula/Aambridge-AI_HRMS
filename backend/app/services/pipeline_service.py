@@ -544,8 +544,32 @@ def move_application_stage(
     _record_history(db, app, target, current_user.id, remarks)
     if target.name == STAGE_JOINED:
         db.flush()
-        close_job_if_fulfilled(db, jr)
+        closed = close_job_if_fulfilled(db, jr)
+    else:
+        closed = False
     db.commit()
+
+    try:
+        from app.services.dashboard_events import (
+            WIDGETS_JOB_CLOSED,
+            WIDGETS_PLACEMENT,
+            publish_dashboard_event,
+        )
+
+        if target.name == STAGE_JOINED:
+            publish_dashboard_event(
+                "placement.completed",
+                WIDGETS_PLACEMENT,
+                {"application_id": str(app.id), "job_requirement_id": str(jr.id)},
+            )
+        if closed:
+            publish_dashboard_event(
+                "job.closed",
+                WIDGETS_JOB_CLOSED,
+                {"job_requirement_id": str(jr.id)},
+            )
+    except Exception:
+        pass
 
     app = _load_app_for_pipeline(db, app.id)
     jr = (
