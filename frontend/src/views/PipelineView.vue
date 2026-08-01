@@ -460,7 +460,6 @@ function formatExp(years: number | null | undefined) {
                   <th>Recruiter</th>
                   <th>Contact</th>
                   <th>Submitted</th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -516,11 +515,6 @@ function formatExp(years: number | null | undefined) {
                     </div>
                   </td>
                   <td>{{ formatWhen(row.submitted_at) }}</td>
-                  <td class="pipeline-table__actions" @click.stop>
-                    <button type="button" class="hrms-btn hrms-btn--sm" @click="openCard(row)">
-                      Details
-                    </button>
-                  </td>
                 </tr>
               </tbody>
             </table>
@@ -661,7 +655,7 @@ function formatExp(years: number | null | undefined) {
               </div>
             </div>
 
-            <h3 class="pipeline-aside__section">Key dates &amp; offer</h3>
+            <h3 class="pipeline-aside__section">Timeline</h3>
             <div class="hrms-info-grid pipeline-aside__info">
               <div class="hrms-info-item">
                 <span class="hrms-info-label">Applied</span>
@@ -671,6 +665,18 @@ function formatExp(years: number | null | undefined) {
                 <span class="hrms-info-label">Submitted</span>
                 <span class="hrms-info-value">{{ formatWhen(selected.submitted_at) }}</span>
               </div>
+            </div>
+
+            <template
+              v-if="
+                selected.current_stage === 'Offer' ||
+                selected.current_stage === 'Joined' ||
+                selected.offer_date ||
+                selected.offer_ctc != null
+              "
+            >
+              <h3 class="pipeline-aside__section">Offer details</h3>
+              <div class="hrms-info-grid pipeline-aside__info">
               <div class="hrms-info-item">
                 <span class="hrms-info-label">Offer date</span>
                 <span class="hrms-info-value">{{ formatWhen(selected.offer_date) }}</span>
@@ -689,11 +695,18 @@ function formatExp(years: number | null | undefined) {
                 <span class="hrms-info-label">Offer status</span>
                 <span class="hrms-info-value">{{ selected.offer_status || EMPTY }}</span>
               </div>
+              </div>
+            </template>
+
+            <template v-if="selected.current_stage === 'Joined' || selected.joined_date">
+              <h3 class="pipeline-aside__section">Joining</h3>
+              <div class="hrms-info-grid pipeline-aside__info">
               <div class="hrms-info-item">
                 <span class="hrms-info-label">Joined date</span>
                 <span class="hrms-info-value">{{ formatWhen(selected.joined_date) }}</span>
               </div>
-            </div>
+              </div>
+            </template>
 
             <h3 class="pipeline-aside__section">Interview rounds</h3>
             <ol v-if="selected.interviews.length" class="pipeline-interviews">
