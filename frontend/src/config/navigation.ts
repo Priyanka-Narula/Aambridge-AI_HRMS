@@ -51,13 +51,6 @@ export const navigationItems: NavItem[] = [
     roles: ['owner'],
   },
   {
-    id: 'reports',
-    label: 'Reports',
-    icon: 'reports',
-    route: '/reports',
-    roles: ['owner'],
-  },
-  {
     id: 'settings',
     label: 'Profile',
     icon: 'settings',
