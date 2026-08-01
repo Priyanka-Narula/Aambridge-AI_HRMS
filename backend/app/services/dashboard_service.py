@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
+from typing import Literal
 
 from fastapi import HTTPException, status
 from sqlalchemy import cast, extract, func
@@ -84,6 +85,321 @@ def get_analytics_dashboard(
         end=end,
         job_ids=scoped or empty,
     )
+
+
+def get_recruiter_performance(
+    db: Session,
+    *,
+    period: Literal["monthly", "till_date"] = "monthly",
+    industry: str | None = None,
+) -> dict:
+    """Return owner-facing recruiter performance metrics, optionally by industry."""
+    today = date.today()
+    start = _month_start(today) if period == "monthly" else None
+    period_start = (
+        datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc)
+        if start
+        else None
+    )
+    period_end = datetime.combine(today, datetime.max.time(), tzinfo=timezone.utc)
+    month_start = _month_start(today)
+    normalized_industry = industry.strip() if industry else None
+
+    industries = [
+        value
+        for (value,) in (
+            db.query(Client.industry)
+            .filter(Client.industry.is_not(None), func.trim(Client.industry) != "")
+            .distinct()
+            .order_by(Client.industry)
+            .all()
+        )
+        if value
+    ]
+
+    recruiters = (
+        db.query(Recruiter, User)
+        .join(User, User.id == Recruiter.user_id)
+        .filter(Recruiter.status == "active", User.status == "active")
+        .order_by(User.first_name, User.last_name)
+        .all()
+    )
+
+    def apply_industry_filter(query):
+        if normalized_industry:
+            return query.filter(Client.industry == normalized_industry)
+        return query
+
+    def application_query(user_id: uuid.UUID):
+        return apply_industry_filter(
+            db.query(CandidateApplication.id)
+            .join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id)
+            .join(Client, Client.id == JobRequirement.client_id)
+            .filter(CandidateApplication.submitted_by == user_id)
+        )
+
+    def placement_query(user_id: uuid.UUID):
+        return apply_industry_filter(
+            db.query(Placement)
+            .join(CandidateApplication, CandidateApplication.id == Placement.application_id)
+            .join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id)
+            .join(Client, Client.id == JobRequirement.client_id)
+            .filter(CandidateApplication.submitted_by == user_id, Placement.joined_date.is_not(None))
+        )
+
+    def in_submission_period(query):
+        query = query.filter(
+            CandidateApplication.submitted_at.is_not(None),
+            CandidateApplication.submitted_at <= period_end,
+        )
+        if period_start:
+            query = query.filter(CandidateApplication.submitted_at >= period_start)
+        return query
+
+    def in_interview_period(query):
+        query = query.filter(
+            Interview.scheduled_datetime.is_not(None),
+            Interview.scheduled_datetime <= period_end,
+        )
+        if period_start:
+            query = query.filter(Interview.scheduled_datetime >= period_start)
+        return query
+
+    def in_offer_period(query):
+        query = query.filter(Offer.offer_date.is_not(None), Offer.offer_date <= today)
+        if start:
+            query = query.filter(Offer.offer_date >= start)
+        return query
+
+    def in_placement_period(query):
+        query = query.filter(Placement.joined_date <= today)
+        if start:
+            query = query.filter(Placement.joined_date >= start)
+        return query
+
+    first_interview_at = (
+        db.query(
+            Interview.application_id.label("application_id"),
+            func.min(Interview.scheduled_datetime).label("scheduled_at"),
+        )
+        .filter(Interview.scheduled_datetime.is_not(None))
+        .group_by(Interview.application_id)
+        .subquery()
+    )
+
+    result = []
+    for recruiter, user in recruiters:
+        submissions_total = (
+            in_submission_period(application_query(user.id))
+            .with_entities(func.count(CandidateApplication.id))
+            .scalar()
+            or 0
+        )
+        approved_submissions = (
+            in_submission_period(application_query(user.id))
+            .filter(CandidateApplication.owner_status == "approved")
+            .with_entities(func.count(CandidateApplication.id))
+            .scalar()
+            or 0
+        )
+        interviews_total = (
+            in_interview_period(
+                db.query(func.count(Interview.id))
+                .join(CandidateApplication, CandidateApplication.id == Interview.application_id)
+                .filter(CandidateApplication.submitted_by == user.id)
+            )
+        )
+        interviews_total = apply_industry_filter(
+            interviews_total
+            .join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id)
+            .join(Client, Client.id == JobRequirement.client_id)
+        ).scalar() or 0
+        offers_total = (
+            in_offer_period(
+                db.query(func.count(Offer.id))
+                .join(CandidateApplication, CandidateApplication.id == Offer.application_id)
+                .join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id)
+                .join(Client, Client.id == JobRequirement.client_id)
+                .filter(CandidateApplication.submitted_by == user.id)
+            )
+        )
+        offers_total = apply_industry_filter(offers_total).scalar() or 0
+
+        accepted_offers = (
+            in_offer_period(
+                db.query(func.count(Offer.id))
+                .join(CandidateApplication, CandidateApplication.id == Offer.application_id)
+                .join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id)
+                .join(Client, Client.id == JobRequirement.client_id)
+                .filter(
+                    CandidateApplication.submitted_by == user.id,
+                    Offer.status == "accepted",
+                )
+            )
+        )
+        accepted_offers = apply_industry_filter(accepted_offers).scalar() or 0
+
+        period_placements = in_placement_period(placement_query(user.id))
+        placements_total = period_placements.count()
+        positions_closed_this_month = (
+            placement_query(user.id)
+            .filter(Placement.joined_date >= month_start, Placement.joined_date <= today)
+            .count()
+        )
+        avg_days = (
+            period_placements
+            .with_entities(
+                func.avg(
+                    Placement.joined_date
+                    - func.coalesce(
+                        CandidateApplication.applied_date,
+                        cast(CandidateApplication.submitted_at, Date),
+                    )
+                )
+            )
+            .filter(
+                CandidateApplication.applied_date.is_not(None)
+                | CandidateApplication.submitted_at.is_not(None)
+            )
+            .scalar()
+        )
+        avg_response_days = (
+            in_submission_period(
+                apply_industry_filter(
+                    db.query(
+                        func.avg(
+                            cast(first_interview_at.c.scheduled_at, Date)
+                            - cast(CandidateApplication.submitted_at, Date)
+                        )
+                    )
+                    .join(
+                        first_interview_at,
+                        first_interview_at.c.application_id == CandidateApplication.id,
+                    )
+                    .join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id)
+                    .join(Client, Client.id == JobRequirement.client_id)
+                    .filter(
+                        CandidateApplication.submitted_by == user.id,
+                        first_interview_at.c.scheduled_at >= CandidateApplication.submitted_at,
+                    )
+                )
+            )
+            .scalar()
+        )
+        submission_quality = (
+            round((approved_submissions / submissions_total) * 100, 1)
+            if submissions_total
+            else 0
+        )
+        offer_acceptance_rate = (
+            round((accepted_offers / offers_total) * 100, 1) if offers_total else 0
+        )
+
+        result.append(
+            {
+                "recruiter_id": str(recruiter.id),
+                "name": f"{user.first_name} {user.last_name}".strip(),
+                "positions_closed_this_month": int(positions_closed_this_month),
+                "positions_closed_total": int(placements_total),
+                "submissions_total": int(submissions_total),
+                "interviews_total": int(interviews_total),
+                "offers_total": int(offers_total),
+                "approved_submissions": int(approved_submissions),
+                "accepted_offers": int(accepted_offers),
+                "submission_quality": submission_quality,
+                "offer_acceptance_rate": offer_acceptance_rate,
+                "conversion_rate": round((placements_total / submissions_total) * 100, 1)
+                if submissions_total
+                else 0,
+                "avg_time_to_hire_days": round(float(avg_days), 1)
+                if avg_days is not None
+                else None,
+                "avg_response_days": round(float(avg_response_days), 1)
+                if avg_response_days is not None
+                else None,
+                "placements_monthly": _recruiter_placements_monthly(
+                    db,
+                    user_id=user.id,
+                    industry=normalized_industry,
+                ),
+            }
+        )
+
+    _score_recruiters(result)
+    result.sort(key=lambda item: item["productivity_score"], reverse=True)
+    return {"recruiters": result, "industries": industries}
+
+
+def _score_recruiters(recruiters: list[dict]) -> None:
+    """Normalize productivity inputs across the cohort and attach weighted scores."""
+    components = {
+        "placements": ("positions_closed_total", 0.35, False),
+        "interviews": ("interviews_total", 0.25, False),
+        "submission_quality": ("submission_quality", 0.15, False),
+        "offer_acceptance": ("offer_acceptance_rate", 0.15, False),
+        "response_time": ("avg_response_days", 0.10, True),
+    }
+    normalized: dict[str, dict[str, float]] = {
+        str(recruiter["recruiter_id"]): {} for recruiter in recruiters
+    }
+
+    for component, (field, _weight, invert) in components.items():
+        available = [float(row[field]) for row in recruiters if row[field] is not None]
+        minimum = min(available) if available else 0
+        maximum = max(available) if available else 0
+        span = maximum - minimum
+        for recruiter in recruiters:
+            value = recruiter[field]
+            if value is None or span == 0:
+                score = 0.0
+            elif invert:
+                score = ((maximum - float(value)) / span) * 100
+            else:
+                score = ((float(value) - minimum) / span) * 100
+            normalized[str(recruiter["recruiter_id"])][component] = round(score, 1)
+
+    for recruiter in recruiters:
+        breakdown = normalized[str(recruiter["recruiter_id"])]
+        score = sum(
+            breakdown[component] * weight
+            for component, (_field, weight, _invert) in components.items()
+        )
+        recruiter["score_breakdown"] = breakdown
+        recruiter["productivity_score"] = round(score, 1)
+
+
+def _recruiter_placements_monthly(
+    db: Session,
+    *,
+    user_id: uuid.UUID,
+    industry: str | None,
+    months: int = 6,
+) -> list[dict]:
+    end = _month_start(date.today())
+    start = _add_months(end, -(months - 1))
+    query = (
+        db.query(
+            extract("year", Placement.joined_date).label("y"),
+            extract("month", Placement.joined_date).label("m"),
+            func.count(Placement.id),
+        )
+        .join(CandidateApplication, CandidateApplication.id == Placement.application_id)
+        .join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id)
+        .join(Client, Client.id == JobRequirement.client_id)
+        .filter(
+            CandidateApplication.submitted_by == user_id,
+            Placement.joined_date >= start,
+        )
+    )
+    if industry:
+        query = query.filter(Client.industry == industry)
+    keyed = {(int(y), int(m)): int(count) for y, m, count in query.group_by("y", "m").all()}
+    cursor = start
+    values = []
+    for _ in range(months):
+        values.append({"label": _label_month(cursor), "value": keyed.get((cursor.year, cursor.month), 0)})
+        cursor = _add_months(cursor, 1)
+    return values
 
 
 def _owner_dashboard(db: Session, user: User, *, start: date, end: date) -> dict:
@@ -620,6 +936,7 @@ def _recent_activities(
                 "title": "Candidate uploaded",
                 "description": f"{c.first_name} {c.last_name}".strip(),
                 "created_at": c.created_at.isoformat() if c.created_at else None,
+                "actor": c.created_by,
             }
         )
 
@@ -645,6 +962,7 @@ def _recent_activities(
                 "title": "Candidate approved" if kind.endswith("approved") else "Candidate rejected",
                 "description": f"{cand.first_name} {cand.last_name}".strip(),
                 "created_at": app.submitted_at.isoformat() if app.submitted_at else None,
+                "actor": "Owner",
             }
         )
 
@@ -657,6 +975,7 @@ def _recent_activities(
                 "title": "Placement completed",
                 "description": f"{row['candidate_name']} · {row['client_name']}",
                 "created_at": row["joined_date"],
+                "actor": None,
             }
         )
 
@@ -676,8 +995,25 @@ def _recent_activities(
                 "title": "Job closed",
                 "description": jr.job_title,
                 "created_at": jr.created_at.isoformat() if jr.created_at else None,
+                "actor": None,
             }
         )
+
+    # New clients (owner-only feed; recruiters skip company-wide client list)
+    if job_ids is None:
+        for client in (
+            db.query(Client).order_by(Client.created_at.desc()).limit(limit).all()
+        ):
+            events.append(
+                {
+                    "id": f"client-{client.id}",
+                    "type": "client.created",
+                    "title": "Client created",
+                    "description": client.company_name,
+                    "created_at": client.created_at.isoformat() if client.created_at else None,
+                    "actor": None,
+                }
+            )
 
     events.sort(key=lambda e: e.get("created_at") or "", reverse=True)
     return events[:limit]

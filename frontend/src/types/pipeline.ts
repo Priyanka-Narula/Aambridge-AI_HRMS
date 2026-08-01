@@ -4,6 +4,15 @@ export interface PipelineStage {
   order_no: number
 }
 
+export interface InterviewRound {
+  id: string
+  interview_round: number
+  status: string
+  scheduled_datetime: string | null
+  mode: string | null
+  interviewer_name: string | null
+}
+
 export interface PipelineCard {
   id: string
   candidate_id: string
@@ -33,6 +42,7 @@ export interface PipelineCard {
   interview_mode: string | null
   interview_status: string | null
   interviewer_name: string | null
+  interviews: InterviewRound[]
   offer_ctc: number | null
   offer_date: string | null
   offer_status: string | null
@@ -85,6 +95,16 @@ export interface PipelineMovePayload {
   interview_mode?: string | null
 }
 
+export type InterviewAction = 'cancel' | 'change_date' | 'no_show' | 'reschedule'
+
+export interface InterviewActionPayload {
+  action: InterviewAction
+  interview_scheduled_at?: string | null
+  interviewer_name?: string | null
+  interview_mode?: string | null
+  remarks?: string | null
+}
+
 export interface ShareApprovedPayload {
   to_emails?: string[]
   subject?: string
@@ -99,31 +119,45 @@ export interface ShareApprovedResult {
   candidate_count: number
 }
 
-/** Forward-only stage moves (mirrors backend). No previous-stage changes. */
+/** Main hiring path; stage moves mirror the backend's immediate-next rules. */
 export const FORWARD_ORDER = [
   'Applied',
   'Shortlisted',
-  'Screening',
   'Interview',
   'Offer',
   'Joined',
 ] as const
 
-export function allowedStageTargets(currentStage: string): string[] {
+export function nextForwardStage(currentStage: string): string | null {
+  const index = FORWARD_ORDER.indexOf(currentStage as (typeof FORWARD_ORDER)[number])
+  return index >= 0 ? (FORWARD_ORDER[index + 1] ?? null) : null
+}
+
+export function resumeStageFromHistory(history: StageHistoryItem[]): string | null {
+  for (const item of [...history].reverse()) {
+    if (FORWARD_ORDER.includes(item.stage_name as (typeof FORWARD_ORDER)[number])) {
+      return item.stage_name
+    }
+  }
+  return null
+}
+
+export function allowedStageTargets(currentStage: string, resumeStage?: string | null): string[] {
   if (currentStage === 'Joined' || currentStage === 'Rejected') return []
   if (currentStage === 'On Hold') {
-    return [...FORWARD_ORDER, 'Rejected']
+    return [...(resumeStage ? [resumeStage] : []), 'Rejected']
   }
-  const idx = FORWARD_ORDER.indexOf(currentStage as (typeof FORWARD_ORDER)[number])
-  if (idx === -1) return []
-  return [...FORWARD_ORDER.slice(idx + 1), 'On Hold', 'Rejected']
+  if (currentStage === 'Interview') {
+    return ['Interview', 'Offer', 'On Hold', 'Rejected']
+  }
+  const nextStage = nextForwardStage(currentStage)
+  return [...(nextStage ? [nextStage] : []), 'On Hold', 'Rejected']
 }
 
 /** @deprecated use allowedStageTargets */
 export const PIPELINE_TRANSITIONS: Record<string, string[]> = {
   Applied: allowedStageTargets('Applied'),
   Shortlisted: allowedStageTargets('Shortlisted'),
-  Screening: allowedStageTargets('Screening'),
   Interview: allowedStageTargets('Interview'),
   Offer: allowedStageTargets('Offer'),
   Joined: [],

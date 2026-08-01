@@ -10,6 +10,14 @@ from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
 
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def set_event_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """Capture the app event loop so sync route handlers can publish events."""
+    global _main_loop
+    _main_loop = loop
+
 
 class DashboardEventHub:
     def __init__(self) -> None:
@@ -89,10 +97,16 @@ WIDGETS_JOB_CLOSED = [
     "recent_activities",
     "notifications",
 ]
+WIDGETS_CLIENT = [
+    "kpis",
+    "client_placements",
+    "recent_activities",
+    "notifications",
+]
 
 
 def publish_dashboard_event(event_type: str, widgets: list[str], detail: dict[str, Any] | None = None) -> None:
-    """Fire-and-forget broadcast from sync service code."""
+    """Broadcast from sync or async service code (thread-pool safe)."""
     payload = {
         "type": event_type,
         "widgets": widgets,
@@ -101,6 +115,18 @@ def publish_dashboard_event(event_type: str, widgets: list[str], detail: dict[st
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        # No event loop (e.g. sync script) — skip live push.
+        loop = _main_loop
+
+    if loop is None or not loop.is_running():
+        logger.debug("Skipping dashboard event %s — no running event loop", event_type)
         return
-    loop.create_task(dashboard_hub.broadcast(payload))
+
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+
+    if running is loop:
+        loop.create_task(dashboard_hub.broadcast(payload))
+    else:
+        asyncio.run_coroutine_threadsafe(dashboard_hub.broadcast(payload), loop)

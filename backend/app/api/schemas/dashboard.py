@@ -80,11 +80,45 @@ class DashboardNotificationItem(BaseModel):
     title: str
     description: str
     created_at: str | None = None
+    actor: str | None = None
 
 
 class DashboardNotificationsResponse(BaseModel):
     items: list[DashboardNotificationItem] = Field(default_factory=list)
     unread_count: int = 0
+
+
+class RecruiterScoreBreakdown(BaseModel):
+    placements: float = 0
+    interviews: float = 0
+    submission_quality: float = 0
+    offer_acceptance: float = 0
+    response_time: float = 0
+
+
+class RecruiterMetrics(BaseModel):
+    recruiter_id: str
+    name: str
+    positions_closed_this_month: int = 0
+    positions_closed_total: int = 0
+    submissions_total: int = 0
+    interviews_total: int = 0
+    offers_total: int = 0
+    conversion_rate: float = 0
+    avg_time_to_hire_days: float | None = None
+    approved_submissions: int = 0
+    accepted_offers: int = 0
+    submission_quality: float = 0
+    offer_acceptance_rate: float = 0
+    avg_response_days: float | None = None
+    productivity_score: float = 0
+    score_breakdown: RecruiterScoreBreakdown = Field(default_factory=RecruiterScoreBreakdown)
+    placements_monthly: list[NamedCount] = Field(default_factory=list)
+
+
+class RecruiterPerformanceResponse(BaseModel):
+    recruiters: list[RecruiterMetrics] = Field(default_factory=list)
+    industries: list[str] = Field(default_factory=list)
 
 
 class AnalyticsDashboardResponse(BaseModel):

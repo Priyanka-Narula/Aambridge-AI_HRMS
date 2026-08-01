@@ -25,6 +25,7 @@ onMounted(() => {
 
   unsubscribeLive = live.subscribe((event) => {
     if (event.type === 'connected') return
+    notifications.ingestEvent(event)
     notifications.refreshIfNeeded(event.widgets)
   })
 })

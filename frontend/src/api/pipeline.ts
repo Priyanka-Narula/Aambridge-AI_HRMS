@@ -1,6 +1,7 @@
 import apiClient from '@/api/client'
 import type {
   CandidateStageHistory,
+  InterviewActionPayload,
   PipelineBoard,
   PipelineCard,
   PipelineMovePayload,
@@ -35,6 +36,17 @@ export async function movePipelineStage(
 ): Promise<PipelineCard> {
   const { data } = await apiClient.patch<PipelineCard>(
     `/api/v1/pipeline/applications/${appId}/stage`,
+    payload,
+  )
+  return data
+}
+
+export async function updatePipelineInterview(
+  appId: string,
+  payload: InterviewActionPayload,
+): Promise<PipelineCard> {
+  const { data } = await apiClient.patch<PipelineCard>(
+    `/api/v1/pipeline/applications/${appId}/interview`,
     payload,
   )
   return data

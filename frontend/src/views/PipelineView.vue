@@ -1,16 +1,26 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   fetchPipelineBoard,
   fetchPipelineHistory,
   movePipelineStage,
+  updatePipelineInterview,
 } from '@/api/pipeline'
 import HrmsAlert from '@/components/ui/HrmsAlert.vue'
 import HrmsModal from '@/components/ui/HrmsModal.vue'
 import PageLayout from '@/components/ui/PageLayout.vue'
 import { useAuthStore } from '@/stores/auth'
-import type { PipelineCard, PipelineStage, StageHistoryItem } from '@/types/pipeline'
-import { allowedStageTargets } from '@/types/pipeline'
+import type {
+  InterviewAction,
+  PipelineCard,
+  PipelineStage,
+  StageHistoryItem,
+} from '@/types/pipeline'
+import {
+  allowedStageTargets,
+  nextForwardStage,
+  resumeStageFromHistory,
+} from '@/types/pipeline'
 import { avatarHue, EMPTY, formatInr, initials, orEmpty } from '@/utils/format'
 
 const auth = useAuthStore()
@@ -26,6 +36,7 @@ const selected = ref<PipelineCard | null>(null)
 const panelCollapsed = ref(false)
 const showMoveModal = ref(false)
 const targetStage = ref('')
+const interviewAction = ref<InterviewAction | null>(null)
 const moveRemarks = ref('')
 const offeredCtc = ref('')
 const joiningDate = ref('')
@@ -36,11 +47,11 @@ const interviewMode = ref('online')
 const moving = ref(false)
 const history = ref<StageHistoryItem[]>([])
 const historyLoading = ref(false)
+const now = ref(Date.now())
 
 const STAGE_COLORS: Record<string, string> = {
   Applied: '#64748b',
   Shortlisted: '#6366f1',
-  Screening: '#0ea5e9',
   Interview: '#8b5cf6',
   Offer: '#f59e0b',
   Joined: '#22c55e',
@@ -82,8 +93,89 @@ const filteredRows = computed(() => {
 
 const nextStages = computed(() => {
   if (!selected.value?.current_stage) return []
-  return allowedStageTargets(selected.value.current_stage)
+  return allowedStageTargets(selected.value.current_stage, resumeStage.value)
 })
+
+const resumeStage = computed(() => resumeStageFromHistory(history.value))
+const isInterviewStage = computed(() => selected.value?.current_stage === 'Interview')
+const isScheduledInterview = computed(
+  () => selected.value?.interview_status === 'scheduled',
+)
+const interviewIsFuture = computed(() => {
+  const scheduledAt = selected.value?.interview_scheduled_at
+  return Boolean(scheduledAt && new Date(scheduledAt).getTime() > now.value)
+})
+const canAdvanceInterview = computed(() => {
+  if (!isInterviewStage.value) return true
+  const interviewStatus = selected.value?.interview_status
+  if (!interviewStatus || interviewStatus === 'cancelled') return true
+  return interviewStatus === 'scheduled' && !interviewIsFuture.value
+})
+const canCancelInterview = computed(
+  () => isScheduledInterview.value && interviewIsFuture.value,
+)
+const canChangeInterviewDate = computed(
+  () => isScheduledInterview.value && interviewIsFuture.value,
+)
+const canMarkNoShow = computed(
+  () => isScheduledInterview.value && !interviewIsFuture.value,
+)
+const canRescheduleInterview = computed(() =>
+  ['cancelled', 'no_show'].includes(selected.value?.interview_status ?? ''),
+)
+const requiresInterviewSchedule = computed(
+  () =>
+    targetStage.value === 'Interview' ||
+    interviewAction.value === 'change_date' ||
+    interviewAction.value === 'reschedule',
+)
+
+const primaryStage = computed(() => {
+  const currentStage = selected.value?.current_stage
+  if (!currentStage) return null
+  if (currentStage === 'On Hold') return resumeStage.value
+  if (currentStage === 'Interview') return 'Interview'
+  return nextForwardStage(currentStage)
+})
+
+function actionLabel(stage: string) {
+  if (stage === 'Interview' && selected.value?.current_stage === 'Interview') {
+    return 'Next Round'
+  }
+  if (stage === 'Offer' && selected.value?.current_stage === 'Interview') {
+    return 'Move to Offer'
+  }
+  if (selected.value?.current_stage === 'On Hold') return `Resume: ${stage}`
+  return `Next: ${stage}`
+}
+
+const moveModalTitle = computed(() => actionLabel(targetStage.value) || 'Update pipeline stage')
+const confirmMoveLabel = computed(() => {
+  if (interviewAction.value === 'cancel') return 'Cancel interview'
+  if (interviewAction.value === 'change_date') return 'Change interview date'
+  if (interviewAction.value === 'no_show') return 'Mark no show'
+  if (interviewAction.value === 'reschedule') return 'Reschedule interview'
+  if (targetStage.value === 'Interview' && selected.value?.current_stage === 'Interview') {
+    return 'Schedule next round'
+  }
+  return actionLabel(targetStage.value) || 'Update stage'
+})
+
+const modalTitle = computed(() => {
+  if (interviewAction.value === 'cancel') return 'Cancel interview'
+  if (interviewAction.value === 'change_date') return 'Change interview date'
+  if (interviewAction.value === 'no_show') return 'Mark interview no show'
+  if (interviewAction.value === 'reschedule') return 'Reschedule interview'
+  return moveModalTitle.value
+})
+const canConfirmMove = computed(
+  () =>
+    Boolean(targetStage.value || interviewAction.value) &&
+    !(
+      ['change_date', 'reschedule'].includes(interviewAction.value ?? '') &&
+      !interviewScheduledAt.value
+    ),
+)
 
 async function loadBoard() {
   loading.value = true
@@ -109,7 +201,17 @@ watch(searchQuery, () => {
   }, 300)
 })
 
-onMounted(loadBoard)
+let nowTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  void loadBoard()
+  nowTimer = setInterval(() => {
+    now.value = Date.now()
+  }, 30_000)
+})
+
+onBeforeUnmount(() => {
+  if (nowTimer) clearInterval(nowTimer)
+})
 
 async function openCard(card: PipelineCard) {
   selected.value = card
@@ -138,6 +240,7 @@ function togglePanelCollapse() {
 
 function resetMoveForm() {
   targetStage.value = ''
+  interviewAction.value = null
   moveRemarks.value = ''
   offeredCtc.value = ''
   joiningDate.value = ''
@@ -147,41 +250,52 @@ function resetMoveForm() {
   interviewMode.value = 'online'
 }
 
-function openMoveModal(stage?: string) {
+function openMoveModal(stage: string) {
   resetMoveForm()
-  targetStage.value = stage ?? nextStages.value[0] ?? ''
+  targetStage.value = stage
   showMoveModal.value = true
 }
 
-function openMoveFromRow(card: PipelineCard, event: Event) {
-  event.stopPropagation()
-  selected.value = card
-  panelCollapsed.value = false
-  openMoveModal()
+function openInterviewActionModal(action: InterviewAction) {
+  resetMoveForm()
+  interviewAction.value = action
+  showMoveModal.value = true
 }
 
 async function confirmMove() {
-  if (!selected.value || !targetStage.value) return
+  if (!selected.value || (!targetStage.value && !interviewAction.value)) return
   moving.value = true
   error.value = ''
   try {
-    const updated = await movePipelineStage(selected.value.id, {
-      stage_name: targetStage.value,
-      remarks: moveRemarks.value.trim() || null,
-      offered_ctc: offeredCtc.value ? Number(offeredCtc.value) : null,
-      joining_date: joiningDate.value || null,
-      joined_date: joinedDate.value || null,
-      interview_scheduled_at: interviewScheduledAt.value
-        ? new Date(interviewScheduledAt.value).toISOString()
-        : null,
-      interviewer_name: interviewerName.value.trim() || null,
-      interview_mode: interviewMode.value.trim() || null,
-    })
+    const updated = interviewAction.value
+      ? await updatePipelineInterview(selected.value.id, {
+          action: interviewAction.value,
+          remarks: moveRemarks.value.trim() || null,
+          interview_scheduled_at: interviewScheduledAt.value
+            ? new Date(interviewScheduledAt.value).toISOString()
+            : null,
+          interviewer_name: interviewerName.value.trim() || null,
+          interview_mode: interviewMode.value.trim() || null,
+        })
+      : await movePipelineStage(selected.value.id, {
+          stage_name: targetStage.value,
+          remarks: moveRemarks.value.trim() || null,
+          offered_ctc: offeredCtc.value ? Number(offeredCtc.value) : null,
+          joining_date: joiningDate.value || null,
+          joined_date: joinedDate.value || null,
+          interview_scheduled_at: interviewScheduledAt.value
+            ? new Date(interviewScheduledAt.value).toISOString()
+            : null,
+          interviewer_name: interviewerName.value.trim() || null,
+          interview_mode: interviewMode.value.trim() || null,
+        })
     const idx = cards.value.findIndex((c) => c.id === updated.id)
     if (idx !== -1) cards.value[idx] = updated
     else cards.value.unshift(updated)
     selected.value = updated
-    success.value = `${updated.candidate_name} moved to ${updated.current_stage}`
+    success.value = interviewAction.value
+      ? `${updated.candidate_name}'s interview was updated`
+      : `${updated.candidate_name} moved to ${updated.current_stage}`
     showMoveModal.value = false
     history.value = await fetchPipelineHistory(updated.id)
   } catch (err) {
@@ -357,14 +471,6 @@ function formatExp(years: number | null | undefined) {
                   </td>
                   <td>{{ formatWhen(row.submitted_at) }}</td>
                   <td class="pipeline-table__actions" @click.stop>
-                    <button
-                      v-if="allowedStageTargets(row.current_stage ?? '').length"
-                      type="button"
-                      class="hrms-btn hrms-btn--sm"
-                      @click="openMoveFromRow(row, $event)"
-                    >
-                      Move
-                    </button>
                     <button type="button" class="hrms-btn hrms-btn--sm" @click="openCard(row)">
                       Details
                     </button>
@@ -520,28 +626,6 @@ function formatExp(years: number | null | undefined) {
                 <span class="hrms-info-value">{{ formatWhen(selected.submitted_at) }}</span>
               </div>
               <div class="hrms-info-item">
-                <span class="hrms-info-label">Interview scheduled</span>
-                <span class="hrms-info-value">{{ formatDateTime(selected.interview_scheduled_at) }}</span>
-              </div>
-              <div class="hrms-info-item">
-                <span class="hrms-info-label">Interview round</span>
-                <span class="hrms-info-value">
-                  {{
-                    selected.interview_round != null
-                      ? `Round ${selected.interview_round}${selected.interview_mode ? ` · ${selected.interview_mode}` : ''}`
-                      : EMPTY
-                  }}
-                </span>
-              </div>
-              <div class="hrms-info-item">
-                <span class="hrms-info-label">Interviewer</span>
-                <span class="hrms-info-value">{{ selected.interviewer_name || EMPTY }}</span>
-              </div>
-              <div class="hrms-info-item">
-                <span class="hrms-info-label">Interview status</span>
-                <span class="hrms-info-value">{{ selected.interview_status || EMPTY }}</span>
-              </div>
-              <div class="hrms-info-item">
                 <span class="hrms-info-label">Offer date</span>
                 <span class="hrms-info-value">{{ formatWhen(selected.offer_date) }}</span>
               </div>
@@ -565,23 +649,102 @@ function formatExp(years: number | null | undefined) {
               </div>
             </div>
 
+            <h3 class="pipeline-aside__section">Interview rounds</h3>
+            <div v-if="selected.interviews.length" class="hrms-info-grid pipeline-aside__info">
+              <div
+                v-for="interview in selected.interviews"
+                :key="interview.id"
+                class="hrms-info-item"
+              >
+                <span class="hrms-info-label">
+                  Round {{ interview.interview_round }}
+                  <template v-if="interview.mode"> · {{ interview.mode }}</template>
+                </span>
+                <span class="hrms-info-value">{{ interview.status }}</span>
+                <span class="hrms-info-value">{{ formatDateTime(interview.scheduled_datetime) }}</span>
+                <span v-if="interview.interviewer_name" class="hrms-info-value">
+                  {{ interview.interviewer_name }}
+                </span>
+              </div>
+            </div>
+            <p v-else class="hrms-empty-inline">No interviews scheduled yet.</p>
+
             <div class="hrms-actions hrms-actions--inline pipeline-aside__actions">
               <button
-                v-if="nextStages.length"
+                v-if="primaryStage"
                 type="button"
                 class="hrms-btn hrms-btn--primary hrms-btn--sm"
-                @click="openMoveModal()"
+                :disabled="isInterviewStage && !canAdvanceInterview"
+                :title="
+                  isInterviewStage && !canAdvanceInterview
+                    ? 'Interview must finish or be cancelled before advancing'
+                    : undefined
+                "
+                @click="openMoveModal(primaryStage)"
               >
-                Change stage
+                {{ actionLabel(primaryStage) }}
               </button>
               <button
-                v-for="stage in nextStages.slice(0, 3)"
-                :key="stage"
+                v-if="selected.current_stage === 'Interview'"
                 type="button"
                 class="hrms-btn hrms-btn--sm"
-                @click="openMoveModal(stage)"
+                :disabled="!canAdvanceInterview"
+                :title="
+                  !canAdvanceInterview
+                    ? 'Interview must finish or be cancelled before advancing'
+                    : undefined
+                "
+                @click="openMoveModal('Offer')"
               >
-                → {{ stage }}
+                Move to Offer
+              </button>
+              <button
+                v-if="canCancelInterview"
+                type="button"
+                class="hrms-btn hrms-btn--sm"
+                @click="openInterviewActionModal('cancel')"
+              >
+                Cancel interview
+              </button>
+              <button
+                v-if="canChangeInterviewDate"
+                type="button"
+                class="hrms-btn hrms-btn--sm"
+                @click="openInterviewActionModal('change_date')"
+              >
+                Change date
+              </button>
+              <button
+                v-if="canMarkNoShow"
+                type="button"
+                class="hrms-btn hrms-btn--sm"
+                @click="openInterviewActionModal('no_show')"
+              >
+                No show
+              </button>
+              <button
+                v-if="canRescheduleInterview"
+                type="button"
+                class="hrms-btn hrms-btn--sm"
+                @click="openInterviewActionModal('reschedule')"
+              >
+                Reschedule interview
+              </button>
+              <button
+                v-if="nextStages.includes('On Hold')"
+                type="button"
+                class="hrms-btn hrms-btn--sm"
+                @click="openMoveModal('On Hold')"
+              >
+                On Hold
+              </button>
+              <button
+                v-if="nextStages.includes('Rejected')"
+                type="button"
+                class="hrms-btn hrms-btn--sm"
+                @click="openMoveModal('Rejected')"
+              >
+                Rejected
               </button>
               <p v-if="!nextStages.length" class="pipeline-aside__terminal">
                 No further stage changes (terminal stage).
@@ -603,14 +766,13 @@ function formatExp(years: number | null | undefined) {
       </Transition>
     </div>
 
-    <HrmsModal v-model="showMoveModal" title="Update pipeline stage" size="md">
+    <HrmsModal v-model="showMoveModal" :title="modalTitle" size="md">
       <div class="hrms-form-stack">
         <label class="hrms-field">
-          <span>New stage</span>
-          <select v-model="targetStage" class="hrms-input">
-            <option disabled value="">Select stage</option>
-            <option v-for="name in nextStages" :key="name" :value="name">{{ name }}</option>
-          </select>
+          <span>{{ interviewAction ? 'Interview action' : 'New stage' }}</span>
+          <div class="hrms-input">
+            {{ interviewAction ? confirmMoveLabel : targetStage }}
+          </div>
         </label>
         <label class="hrms-field">
           <span>Remarks</span>
@@ -621,7 +783,7 @@ function formatExp(years: number | null | undefined) {
             placeholder="Interview feedback, client notes…"
           />
         </label>
-        <template v-if="targetStage === 'Interview'">
+        <template v-if="requiresInterviewSchedule">
           <label class="hrms-field">
             <span>Interview scheduled</span>
             <input v-model="interviewScheduledAt" type="datetime-local" class="hrms-input" />
@@ -666,10 +828,10 @@ function formatExp(years: number | null | undefined) {
         <button
           type="button"
           class="hrms-btn hrms-btn--primary"
-          :disabled="moving || !targetStage"
+          :disabled="moving || !canConfirmMove"
           @click="confirmMove"
         >
-          {{ moving ? 'Updating…' : 'Update stage' }}
+          {{ moving ? 'Updating…' : confirmMoveLabel }}
         </button>
       </template>
     </HrmsModal>

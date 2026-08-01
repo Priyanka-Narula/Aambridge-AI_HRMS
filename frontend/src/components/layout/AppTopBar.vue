@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -17,6 +17,7 @@ const auth = useAuthStore()
 const notifications = useNotificationsStore()
 const showUserMenu = ref(false)
 const showNotifications = ref(false)
+let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 const displayName = computed(() => {
   if (!auth.user) return ''
@@ -78,8 +79,24 @@ function handleLogout() {
   router.push({ name: 'login' })
 }
 
+function onVisible() {
+  if (document.visibilityState === 'visible') {
+    void notifications.load()
+  }
+}
+
 onMounted(() => {
   void notifications.load()
+  refreshTimer = setInterval(() => {
+    void notifications.load()
+  }, 20000)
+  document.addEventListener('visibilitychange', onVisible)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+  refreshTimer = null
+  document.removeEventListener('visibilitychange', onVisible)
 })
 </script>
 
@@ -153,7 +170,17 @@ onMounted(() => {
         <div v-if="showNotifications" class="topbar__dropdown topbar__dropdown--notifications">
           <div class="topbar__dropdown-header">
             <span>Notifications</span>
-            <em v-if="notifications.unreadCount">{{ notifications.unreadCount }} new</em>
+            <div class="topbar__dropdown-header-actions">
+              <em v-if="notifications.unreadCount">{{ notifications.unreadCount }} new</em>
+              <button
+                v-if="notifications.items.length"
+                type="button"
+                class="topbar__notif-clear"
+                @click.stop="notifications.clear()"
+              >
+                Clear
+              </button>
+            </div>
           </div>
           <div v-if="notifications.loading && !notifications.items.length" class="topbar__notif-empty">
             Loading…
@@ -172,6 +199,7 @@ onMounted(() => {
               <div class="topbar__notif-body">
                 <p>{{ n.title }}</p>
                 <span>{{ n.description }}</span>
+                <small v-if="n.actor" class="topbar__notif-actor">By {{ n.actor }}</small>
                 <time>{{ formatNotifTime(n.created_at) }}</time>
               </div>
             </li>
@@ -472,6 +500,12 @@ onMounted(() => {
   border-bottom: 1px solid var(--hrms-border);
 }
 
+.topbar__dropdown-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .topbar__dropdown-header em {
   font-style: normal;
   font-size: 0.72rem;
@@ -480,6 +514,20 @@ onMounted(() => {
   background: var(--hrms-secondary);
   padding: 2px 8px;
   border-radius: 999px;
+}
+
+.topbar__notif-clear {
+  border: 0;
+  background: transparent;
+  color: var(--hrms-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.topbar__notif-clear:hover {
+  color: var(--hrms-primary-dark);
 }
 
 .topbar__notif-empty {
@@ -530,6 +578,10 @@ onMounted(() => {
   background: #ef4444;
 }
 
+.topbar__notif-item[data-tone='default'] .topbar__notif-dot {
+  background: var(--hrms-primary);
+}
+
 .topbar__notif-body p {
   margin: 0 0 2px;
   font-size: 0.84rem;
@@ -550,6 +602,13 @@ onMounted(() => {
   margin-top: 4px;
   font-size: 0.72rem;
   color: var(--hrms-text-muted);
+}
+
+.topbar__notif-actor {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.7rem;
+  color: var(--hrms-primary-muted);
 }
 
 .topbar__dropdown-user-header {

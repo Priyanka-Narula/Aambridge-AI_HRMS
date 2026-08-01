@@ -4,6 +4,8 @@ import type {
   AnalyticsDashboard,
   DashboardNotificationsResponse,
   DashboardStats,
+  RecruiterPerformancePeriod,
+  RecruiterPerformanceResponse,
 } from '@/types/dashboard'
 
 export async function fetchAnalyticsDashboard(params?: {
@@ -22,6 +24,17 @@ export async function fetchDashboardNotifications(
   const { data } = await apiClient.get<DashboardNotificationsResponse>(
     '/api/v1/dashboard/notifications',
     { params: { limit } },
+  )
+  return data
+}
+
+export async function fetchRecruiterPerformance(params?: {
+  period?: RecruiterPerformancePeriod
+  industry?: string
+}): Promise<RecruiterPerformanceResponse> {
+  const { data } = await apiClient.get<RecruiterPerformanceResponse>(
+    '/api/v1/dashboard/recruiter-performance',
+    { params },
   )
   return data
 }

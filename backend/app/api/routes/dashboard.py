@@ -1,18 +1,20 @@
 from datetime import date
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from jose import JWTError
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.schemas.dashboard import (
     AnalyticsDashboardResponse,
     DashboardNotificationsResponse,
+    RecruiterPerformanceResponse,
     DashboardStatsResponse,
 )
 from app.core.database import SessionLocal, get_db
 from app.core.deps import get_current_user
-from app.core.security import decode_access_token
+from app.core.security import ROLE_OWNER, decode_access_token, normalize_role
 from app.models.user_access import User
 from app.services import dashboard_service
 from app.services.dashboard_events import dashboard_hub
@@ -32,6 +34,22 @@ def analytics_dashboard(
         current_user,
         start=start,
         end=end,
+    )
+
+
+@router.get("/recruiter-performance", response_model=RecruiterPerformanceResponse)
+def recruiter_performance(
+    period: Literal["monthly", "till_date"] = Query(default="monthly"),
+    industry: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if normalize_role(current_user.role.name) != ROLE_OWNER:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner access required")
+    return dashboard_service.get_recruiter_performance(
+        db,
+        period=period,
+        industry=industry,
     )
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +12,15 @@ class PipelineStageResponse(BaseModel):
     id: uuid.UUID
     name: str
     order_no: int
+
+
+class InterviewRoundResponse(BaseModel):
+    id: uuid.UUID
+    interview_round: int
+    status: str
+    scheduled_datetime: datetime | None = None
+    mode: str | None = None
+    interviewer_name: str | None = None
 
 
 class PipelineCardResponse(BaseModel):
@@ -44,6 +53,7 @@ class PipelineCardResponse(BaseModel):
     interview_mode: str | None = None
     interview_status: str | None = None
     interviewer_name: str | None = None
+    interviews: list[InterviewRoundResponse] = []
     offer_ctc: Decimal | None = None
     offer_date: date | None = None
     offer_status: str | None = None
@@ -94,6 +104,14 @@ class PipelineMoveRequest(BaseModel):
     interview_scheduled_at: datetime | None = None
     interviewer_name: str | None = None
     interview_mode: str | None = None
+
+
+class InterviewActionRequest(BaseModel):
+    action: Literal["cancel", "change_date", "no_show", "reschedule"]
+    interview_scheduled_at: datetime | None = None
+    interviewer_name: str | None = None
+    interview_mode: str | None = None
+    remarks: str | None = None
 
 
 class ShortlistRequest(BaseModel):

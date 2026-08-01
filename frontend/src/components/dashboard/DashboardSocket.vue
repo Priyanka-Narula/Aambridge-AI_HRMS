@@ -13,18 +13,29 @@ const connected = ref(false)
 let socket: WebSocket | null = null
 let retryTimer: ReturnType<typeof setTimeout> | null = null
 let closedByUs = false
+let retryAttempt = 0
+let connecting = false
 
 function connect() {
+  if (closedByUs || connecting) return
   if (!getTokenPresent()) return
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+    return
+  }
+
+  connecting = true
   try {
     socket = new WebSocket(buildDashboardWsUrl())
   } catch {
+    connecting = false
     scheduleRetry()
     return
   }
 
   socket.onopen = () => {
+    connecting = false
     connected.value = true
+    retryAttempt = 0
   }
   socket.onmessage = (msg) => {
     try {
@@ -36,12 +47,14 @@ function connect() {
     }
   }
   socket.onclose = () => {
+    connecting = false
     connected.value = false
     socket = null
     if (!closedByUs) scheduleRetry()
   }
   socket.onerror = () => {
-    socket?.close()
+    connecting = false
+    // onclose will run after onerror; avoid double close storms
   }
 }
 
@@ -54,15 +67,27 @@ function getTokenPresent() {
 }
 
 function scheduleRetry() {
-  if (retryTimer) clearTimeout(retryTimer)
-  retryTimer = setTimeout(connect, 4000)
+  if (closedByUs || retryTimer) return
+  // Exponential backoff: 2s, 4s, 8s… capped at 30s
+  const delay = Math.min(30_000, 2000 * 2 ** Math.min(retryAttempt, 4))
+  retryAttempt += 1
+  retryTimer = setTimeout(() => {
+    retryTimer = null
+    connect()
+  }, delay)
 }
 
 onMounted(connect)
 onUnmounted(() => {
   closedByUs = true
   if (retryTimer) clearTimeout(retryTimer)
-  socket?.close()
+  retryTimer = null
+  try {
+    socket?.close()
+  } catch {
+    /* ignore */
+  }
+  socket = null
 })
 
 defineExpose({ connected })

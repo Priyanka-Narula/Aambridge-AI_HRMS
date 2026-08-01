@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.schemas.pipeline import (
     CandidateStageHistoryResponse,
     EmailStatusResponse,
+    InterviewActionRequest,
     PipelineBoardResponse,
     PipelineCardResponse,
     PipelineMoveRequest,
@@ -70,6 +71,24 @@ def move_stage(
         joining_date=payload.joining_date,
         joined_date=payload.joined_date,
         revenue_generated=payload.revenue_generated,
+        interview_scheduled_at=payload.interview_scheduled_at,
+        interviewer_name=payload.interviewer_name,
+        interview_mode=payload.interview_mode,
+    )
+
+
+@router.patch("/applications/{app_id}/interview", response_model=PipelineCardResponse)
+def update_interview(
+    app_id: uuid.UUID,
+    payload: InterviewActionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return pipeline_service.update_application_interview(
+        db,
+        app_id,
+        payload.action,
+        current_user,
         interview_scheduled_at=payload.interview_scheduled_at,
         interviewer_name=payload.interviewer_name,
         interview_mode=payload.interview_mode,

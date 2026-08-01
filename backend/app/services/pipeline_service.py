@@ -28,7 +28,6 @@ from app.services.job_requirement_service import close_job_if_fulfilled
 BOARD_STAGE_NAMES = [
     "Applied",
     "Shortlisted",
-    "Screening",
     "Interview",
     "Offer",
     "Joined",
@@ -44,27 +43,46 @@ STAGE_JOINED = "Joined"
 STAGE_REJECTED = "Rejected"
 STAGE_ON_HOLD = "On Hold"
 
-# Main hiring path — only forward moves (plus On Hold / Rejected exits).
+# Interview lifecycle statuses.
+INTERVIEW_STATUS_SCHEDULED = "scheduled"
+INTERVIEW_STATUS_COMPLETED = "completed"
+INTERVIEW_STATUS_CANCELLED = "cancelled"
+INTERVIEW_STATUS_NO_SHOW = "no_show"
+INTERVIEW_STATUS_ON_HOLD = "on_hold"
+INTERVIEW_STATUS_REJECTED = "rejected"
+
+# Main hiring path — only immediate forward moves (plus On Hold / Rejected exits).
 FORWARD_ORDER = [
     "Applied",
     "Shortlisted",
-    "Screening",
     "Interview",
     "Offer",
     "Joined",
 ]
 
 
-def allowed_stage_targets(current_name: str) -> set[str]:
-    """Return stages that are allowed from current (no moving backwards)."""
+def next_forward_stage(current_name: str) -> str | None:
+    """Return the immediate next stage in the main hiring path."""
+    try:
+        return FORWARD_ORDER[FORWARD_ORDER.index(current_name) + 1]
+    except (ValueError, IndexError):
+        return None
+
+
+def allowed_stage_targets(
+    current_name: str, *, resume_stage: str | None = None
+) -> set[str]:
+    """Return the permitted immediate stage actions from the current stage."""
     if current_name in (STAGE_JOINED, STAGE_REJECTED):
         return set()
     if current_name == STAGE_ON_HOLD:
-        # Resume into the active hiring path; Rejected is an exit.
-        return set(FORWARD_ORDER) | {STAGE_REJECTED}
+        return ({resume_stage} if resume_stage in FORWARD_ORDER else set()) | {STAGE_REJECTED}
+    if current_name == STAGE_INTERVIEW:
+        # Re-selecting Interview schedules the next interview round.
+        return {STAGE_INTERVIEW, STAGE_OFFER, STAGE_ON_HOLD, STAGE_REJECTED}
     if current_name in FORWARD_ORDER:
-        idx = FORWARD_ORDER.index(current_name)
-        return set(FORWARD_ORDER[idx + 1 :]) | {STAGE_ON_HOLD, STAGE_REJECTED}
+        next_stage = next_forward_stage(current_name)
+        return ({next_stage} if next_stage else set()) | {STAGE_ON_HOLD, STAGE_REJECTED}
     return set()
 
 
@@ -122,6 +140,75 @@ def _latest_interview(app: CandidateApplication) -> Interview | None:
             i.scheduled_datetime.timestamp() if i.scheduled_datetime else float("-inf"),
         ),
     )
+
+
+def _resume_stage_from_history(db: Session, app_id: uuid.UUID) -> str | None:
+    """Return the most recent main-path stage before the candidate was put on hold."""
+    history = (
+        db.query(ApplicationStageHistory)
+        .join(PipelineStage, ApplicationStageHistory.stage_id == PipelineStage.id)
+        .filter(ApplicationStageHistory.application_id == app_id)
+        .filter(PipelineStage.name.in_(FORWARD_ORDER))
+        .order_by(
+            ApplicationStageHistory.created_at.desc(),
+            ApplicationStageHistory.id.desc(),
+        )
+        .first()
+    )
+    return history.stage.name if history else None
+
+
+def _set_latest_open_interview_status(
+    app: CandidateApplication, interview_status: str
+) -> Interview | None:
+    """Update the latest interview that is still awaiting a final outcome."""
+    interview = _latest_interview(app)
+    if interview and interview.status in {
+        INTERVIEW_STATUS_SCHEDULED,
+        INTERVIEW_STATUS_ON_HOLD,
+    }:
+        interview.status = interview_status
+    return interview
+
+
+def _complete_latest_interview(app: CandidateApplication) -> Interview | None:
+    """Complete the latest interview when the candidate advances from Interview."""
+    interview = _latest_interview(app)
+    if interview and interview.status in {
+        INTERVIEW_STATUS_SCHEDULED,
+        INTERVIEW_STATUS_ON_HOLD,
+        INTERVIEW_STATUS_CANCELLED,
+    }:
+        interview.status = INTERVIEW_STATUS_COMPLETED
+    return interview
+
+
+def _interview_time_has_passed(interview: Interview) -> bool:
+    """Return whether a scheduled interview is due, preserving its timezone."""
+    if interview.scheduled_datetime is None:
+        return True
+    now = datetime.now(tz=interview.scheduled_datetime.tzinfo)
+    return interview.scheduled_datetime <= now
+
+
+def _assert_interview_can_advance(app: CandidateApplication) -> None:
+    """Prevent interview outcomes before a scheduled interview has occurred."""
+    interview = _latest_interview(app)
+    if not interview:
+        return
+    if (
+        interview.status == INTERVIEW_STATUS_SCHEDULED
+        and not _interview_time_has_passed(interview)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Interview must reach its scheduled time before advancing",
+        )
+    if interview.status == INTERVIEW_STATUS_NO_SHOW:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Reschedule a no-show interview before advancing",
+        )
 
 
 def _assert_can_manage_application(
@@ -198,6 +285,15 @@ def serialize_pipeline_card(
     offer_status = app.offer.status if app.offer else None
     joined = app.placement.joined_date if app.placement else None
     interview = _latest_interview(app)
+    interviews = sorted(
+        app.interviews or [],
+        key=lambda item: (
+            item.interview_round or 0,
+            item.scheduled_datetime.timestamp()
+            if item.scheduled_datetime
+            else float("-inf"),
+        ),
+    )
 
     return {
         "id": app.id,
@@ -231,6 +327,17 @@ def serialize_pipeline_card(
         "interview_mode": interview.mode if interview else None,
         "interview_status": interview.status if interview else None,
         "interviewer_name": interview.interviewer_name if interview else None,
+        "interviews": [
+            {
+                "id": item.id,
+                "interview_round": item.interview_round,
+                "status": item.status,
+                "scheduled_datetime": item.scheduled_datetime,
+                "mode": item.mode,
+                "interviewer_name": item.interviewer_name,
+            }
+            for item in interviews
+        ],
         "offer_ctc": offer_ctc,
         "offer_date": offer_date,
         "offer_status": offer_status,
@@ -449,21 +556,25 @@ def move_application_stage(
     current_name = app.current_stage_rel.name if app.current_stage_rel else STAGE_APPLIED
     role = normalize_role(current_user.role.name)
 
-    if current_name == target.name:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Candidate is already in this stage",
-        )
-
     if role not in (ROLE_OWNER, ROLE_RECRUITER):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
-    allowed = allowed_stage_targets(current_name)
+    resume_stage = (
+        _resume_stage_from_history(db, app.id)
+        if current_name == STAGE_ON_HOLD
+        else None
+    )
+    allowed = allowed_stage_targets(current_name, resume_stage=resume_stage)
     if target.name not in allowed:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Cannot move from {current_name} to {target.name} (backward moves are not allowed)",
+            detail=f"Cannot move from {current_name} to {target.name}",
         )
+    if current_name == STAGE_INTERVIEW and target.name in {
+        STAGE_INTERVIEW,
+        STAGE_OFFER,
+    }:
+        _assert_interview_can_advance(app)
 
     app.current_stage = target.id
     if target.name == STAGE_REJECTED:
@@ -475,20 +586,40 @@ def move_application_stage(
     else:
         app.status = "active"
 
+    latest_interview = _latest_interview(app)
+    resuming_interview = (
+        current_name == STAGE_ON_HOLD
+        and target.name == STAGE_INTERVIEW
+        and latest_interview is not None
+        and latest_interview.status == INTERVIEW_STATUS_ON_HOLD
+    )
+
+    if target.name == STAGE_REJECTED:
+        _set_latest_open_interview_status(app, INTERVIEW_STATUS_REJECTED)
+    elif target.name == STAGE_ON_HOLD:
+        _set_latest_open_interview_status(app, INTERVIEW_STATUS_ON_HOLD)
+
     if target.name == STAGE_INTERVIEW:
-        existing = list(app.interviews or [])
-        next_round = (max((i.interview_round for i in existing), default=0) + 1)
-        interview = Interview(
-            application_id=app.id,
-            interview_round=next_round,
-            interviewer_name=(interviewer_name or "").strip() or None,
-            scheduled_datetime=interview_scheduled_at,
-            mode=(interview_mode or "").strip() or "online",
-            status="scheduled",
-        )
-        db.add(interview)
+        if resuming_interview:
+            latest_interview.status = INTERVIEW_STATUS_SCHEDULED
+        else:
+            if current_name == STAGE_INTERVIEW:
+                _complete_latest_interview(app)
+            existing = list(app.interviews or [])
+            next_round = max((i.interview_round for i in existing), default=0) + 1
+            interview = Interview(
+                application_id=app.id,
+                interview_round=next_round,
+                interviewer_name=(interviewer_name or "").strip() or None,
+                scheduled_datetime=interview_scheduled_at,
+                mode=(interview_mode or "").strip() or "online",
+                status=INTERVIEW_STATUS_SCHEDULED,
+            )
+            db.add(interview)
 
     if target.name == STAGE_OFFER:
+        if current_name == STAGE_INTERVIEW:
+            _complete_latest_interview(app)
         if not app.offer:
             offer = Offer(
                 application_id=app.id,
@@ -560,13 +691,22 @@ def move_application_stage(
             publish_dashboard_event(
                 "placement.completed",
                 WIDGETS_PLACEMENT,
-                {"application_id": str(app.id), "job_requirement_id": str(jr.id)},
+                {
+                    "application_id": str(app.id),
+                    "job_requirement_id": str(jr.id),
+                    "actor_name": f"{current_user.first_name} {current_user.last_name}".strip(),
+                    "actor_email": current_user.email,
+                },
             )
         if closed:
             publish_dashboard_event(
                 "job.closed",
                 WIDGETS_JOB_CLOSED,
-                {"job_requirement_id": str(jr.id)},
+                {
+                    "job_requirement_id": str(jr.id),
+                    "actor_name": f"{current_user.first_name} {current_user.last_name}".strip(),
+                    "actor_email": current_user.email,
+                },
             )
     except Exception:
         pass
@@ -578,6 +718,98 @@ def move_application_stage(
         .filter(JobRequirement.id == app.job_requirement_id)
         .one()
     )
+    candidate = db.query(Candidate).filter(Candidate.id == app.candidate_id).first()
+    return serialize_pipeline_card(db, app, jr, candidate)
+
+
+def update_application_interview(
+    db: Session,
+    app_id: uuid.UUID,
+    action: str,
+    current_user: User,
+    *,
+    interview_scheduled_at: datetime | None = None,
+    interviewer_name: str | None = None,
+    interview_mode: str | None = None,
+) -> dict:
+    """Apply a scheduling action to the latest interview for an application."""
+    app = _load_app_for_pipeline(db, app_id)
+    jr = _assert_can_manage_application(db, app, current_user)
+    if app.owner_status != "approved" or not app.in_pipeline:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Candidate must be approved and in the pipeline to manage interviews",
+        )
+    current_name = app.current_stage_rel.name if app.current_stage_rel else None
+    if current_name != STAGE_INTERVIEW:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Interview actions are available only in the Interview stage",
+        )
+
+    interview = _latest_interview(app)
+    if not interview:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No interview is scheduled for this application",
+        )
+
+    if action == "change_date":
+        if interview.status != INTERVIEW_STATUS_SCHEDULED:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Only a scheduled interview date can be changed",
+            )
+        if interview_scheduled_at is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="A new interview date and time is required",
+            )
+        interview.scheduled_datetime = interview_scheduled_at
+    elif action == "cancel":
+        if interview.status != INTERVIEW_STATUS_SCHEDULED:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Only a scheduled interview can be cancelled",
+            )
+        interview.status = INTERVIEW_STATUS_CANCELLED
+    elif action == "no_show":
+        if interview.status != INTERVIEW_STATUS_SCHEDULED or not _interview_time_has_passed(interview):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="No show can be recorded only after the scheduled interview time",
+            )
+        interview.status = INTERVIEW_STATUS_NO_SHOW
+    elif action == "reschedule":
+        if interview.status not in {
+            INTERVIEW_STATUS_CANCELLED,
+            INTERVIEW_STATUS_NO_SHOW,
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Only a cancelled or no-show interview can be rescheduled",
+            )
+        if interview_scheduled_at is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="A new interview date and time is required",
+            )
+        interview.scheduled_datetime = interview_scheduled_at
+        interview.status = INTERVIEW_STATUS_SCHEDULED
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unsupported interview action '{action}'",
+        )
+
+    if action in {"change_date", "reschedule"}:
+        if interviewer_name is not None:
+            interview.interviewer_name = interviewer_name.strip() or None
+        if interview_mode is not None:
+            interview.mode = interview_mode.strip() or None
+
+    db.commit()
+    app = _load_app_for_pipeline(db, app.id)
     candidate = db.query(Candidate).filter(Candidate.id == app.candidate_id).first()
     return serialize_pipeline_card(db, app, jr, candidate)
 

@@ -155,6 +155,7 @@ def create_candidate_record(db: Session, payload: CandidateCreate) -> Candidate:
             {
                 "candidate_id": str(candidate.id),
                 "name": f"{candidate.first_name} {candidate.last_name}".strip(),
+                "actor_name": candidate.created_by,
             },
         )
     except Exception:

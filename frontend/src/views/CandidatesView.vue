@@ -51,7 +51,6 @@ const stageHistoryError = ref('')
 const STAGE_COLORS: Record<string, string> = {
   Applied: '#64748b',
   Shortlisted: '#6366f1',
-  Screening: '#0ea5e9',
   Interview: '#8b5cf6',
   Offer: '#f59e0b',
   Joined: '#22c55e',

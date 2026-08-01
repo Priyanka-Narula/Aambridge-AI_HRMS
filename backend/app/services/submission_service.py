@@ -410,7 +410,12 @@ def approve_submission(
         publish_dashboard_event(
             event,
             WIDGETS_CANDIDATE_DECISION,
-            {"application_id": str(app_id), "action": action},
+            {
+                "application_id": str(app_id),
+                "action": action,
+                "actor_name": f"{current_user.first_name} {current_user.last_name}".strip(),
+                "actor_email": current_user.email,
+            },
         )
     except Exception:
         pass

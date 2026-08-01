@@ -30,6 +30,11 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
+
+    from app.services.dashboard_events import set_event_loop
+
+    set_event_loop(asyncio.get_running_loop())
     init_storage()
     db = SessionLocal()
     try:

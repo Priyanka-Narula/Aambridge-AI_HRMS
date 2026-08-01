@@ -36,9 +36,9 @@ def get_clients(
 def create_client_route(
     payload: ClientCreateRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_owner),
+    current_user: User = Depends(require_owner),
 ):
-    return serialize_client(create_client(db, payload))
+    return serialize_client(create_client(db, payload, actor=current_user))
 
 
 @router.get("/{client_id}", response_model=ClientListItem)
@@ -55,9 +55,9 @@ def update_client_route(
     client_id: uuid.UUID,
     payload: ClientUpdateRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_owner),
+    current_user: User = Depends(require_owner),
 ):
-    return serialize_client(update_client(db, client_id, payload))
+    return serialize_client(update_client(db, client_id, payload, actor=current_user))
 
 
 @router.patch("/{client_id}/status", response_model=ClientListItem)
@@ -65,6 +65,6 @@ def patch_client_status(
     client_id: uuid.UUID,
     payload: ClientStatusUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_owner),
+    current_user: User = Depends(require_owner),
 ):
-    return serialize_client(update_client_status(db, client_id, payload))
+    return serialize_client(update_client_status(db, client_id, payload, actor=current_user))
