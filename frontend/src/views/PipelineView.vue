@@ -35,6 +35,11 @@ const cards = ref<PipelineCard[]>([])
 const selected = ref<PipelineCard | null>(null)
 const panelCollapsed = ref(false)
 const showMoveModal = ref(false)
+const showInterviewPicker = ref(false)
+const showStagePicker = ref(false)
+const showMoreMenu = ref(false)
+const pickedInterviewAction = ref<InterviewAction | null>(null)
+const pickedStage = ref('')
 const targetStage = ref('')
 const interviewAction = ref<InterviewAction | null>(null)
 const moveRemarks = ref('')
@@ -122,6 +127,13 @@ const canMarkNoShow = computed(
 )
 const canRescheduleInterview = computed(() =>
   ['cancelled', 'no_show'].includes(selected.value?.interview_status ?? ''),
+)
+const hasInterviewManagement = computed(
+  () =>
+    canCancelInterview.value ||
+    canChangeInterviewDate.value ||
+    canMarkNoShow.value ||
+    canRescheduleInterview.value,
 )
 const requiresInterviewSchedule = computed(
   () =>
@@ -231,6 +243,9 @@ function closeCard() {
   selected.value = null
   panelCollapsed.value = false
   showMoveModal.value = false
+  showInterviewPicker.value = false
+  showStagePicker.value = false
+  showMoreMenu.value = false
   resetMoveForm()
 }
 
@@ -260,6 +275,37 @@ function openInterviewActionModal(action: InterviewAction) {
   resetMoveForm()
   interviewAction.value = action
   showMoveModal.value = true
+}
+
+function openInterviewPicker() {
+  pickedInterviewAction.value = null
+  showInterviewPicker.value = true
+}
+
+function continueInterview() {
+  pickedStage.value = 'Interview'
+  showStagePicker.value = true
+}
+
+function confirmInterviewActionPick() {
+  if (!pickedInterviewAction.value) return
+  showInterviewPicker.value = false
+  openInterviewActionModal(pickedInterviewAction.value)
+}
+
+function confirmStagePick() {
+  if (!pickedStage.value) return
+  showStagePicker.value = false
+  openMoveModal(pickedStage.value)
+}
+
+function toggleMoreMenu() {
+  showMoreMenu.value = !showMoreMenu.value
+}
+
+function openMoreMove(stage: string) {
+  showMoreMenu.value = false
+  openMoveModal(stage)
 }
 
 async function confirmMove() {
@@ -650,106 +696,32 @@ function formatExp(years: number | null | undefined) {
             </div>
 
             <h3 class="pipeline-aside__section">Interview rounds</h3>
-            <div v-if="selected.interviews.length" class="hrms-info-grid pipeline-aside__info">
-              <div
+            <ol v-if="selected.interviews.length" class="pipeline-interviews">
+              <li
                 v-for="interview in selected.interviews"
                 :key="interview.id"
-                class="hrms-info-item"
+                :class="{ 'pipeline-interviews__item--latest': interview.id === selected.interviews.at(-1)?.id }"
               >
-                <span class="hrms-info-label">
-                  Round {{ interview.interview_round }}
+                <div class="pipeline-interviews__summary">
+                  <strong>Round {{ interview.interview_round }}</strong>
+                  <span class="pipeline-interviews__status">{{ interview.status }}</span>
+                </div>
+                <span>{{ formatDateTime(interview.scheduled_datetime) }}</span>
+                <span>
+                  {{ interview.interviewer_name || 'Interviewer not assigned' }}
                   <template v-if="interview.mode"> · {{ interview.mode }}</template>
                 </span>
-                <span class="hrms-info-value">{{ interview.status }}</span>
-                <span class="hrms-info-value">{{ formatDateTime(interview.scheduled_datetime) }}</span>
-                <span v-if="interview.interviewer_name" class="hrms-info-value">
-                  {{ interview.interviewer_name }}
-                </span>
-              </div>
-            </div>
+                <button
+                  v-if="interview.id === selected.interviews.at(-1)?.id && hasInterviewManagement"
+                  type="button"
+                  class="hrms-btn hrms-btn--ghost hrms-btn--sm pipeline-interviews__manage"
+                  @click="openInterviewPicker"
+                >
+                  Manage interview
+                </button>
+              </li>
+            </ol>
             <p v-else class="hrms-empty-inline">No interviews scheduled yet.</p>
-
-            <div class="hrms-actions hrms-actions--inline pipeline-aside__actions">
-              <button
-                v-if="primaryStage"
-                type="button"
-                class="hrms-btn hrms-btn--primary hrms-btn--sm"
-                :disabled="isInterviewStage && !canAdvanceInterview"
-                :title="
-                  isInterviewStage && !canAdvanceInterview
-                    ? 'Interview must finish or be cancelled before advancing'
-                    : undefined
-                "
-                @click="openMoveModal(primaryStage)"
-              >
-                {{ actionLabel(primaryStage) }}
-              </button>
-              <button
-                v-if="selected.current_stage === 'Interview'"
-                type="button"
-                class="hrms-btn hrms-btn--sm"
-                :disabled="!canAdvanceInterview"
-                :title="
-                  !canAdvanceInterview
-                    ? 'Interview must finish or be cancelled before advancing'
-                    : undefined
-                "
-                @click="openMoveModal('Offer')"
-              >
-                Move to Offer
-              </button>
-              <button
-                v-if="canCancelInterview"
-                type="button"
-                class="hrms-btn hrms-btn--sm"
-                @click="openInterviewActionModal('cancel')"
-              >
-                Cancel interview
-              </button>
-              <button
-                v-if="canChangeInterviewDate"
-                type="button"
-                class="hrms-btn hrms-btn--sm"
-                @click="openInterviewActionModal('change_date')"
-              >
-                Change date
-              </button>
-              <button
-                v-if="canMarkNoShow"
-                type="button"
-                class="hrms-btn hrms-btn--sm"
-                @click="openInterviewActionModal('no_show')"
-              >
-                No show
-              </button>
-              <button
-                v-if="canRescheduleInterview"
-                type="button"
-                class="hrms-btn hrms-btn--sm"
-                @click="openInterviewActionModal('reschedule')"
-              >
-                Reschedule interview
-              </button>
-              <button
-                v-if="nextStages.includes('On Hold')"
-                type="button"
-                class="hrms-btn hrms-btn--sm"
-                @click="openMoveModal('On Hold')"
-              >
-                On Hold
-              </button>
-              <button
-                v-if="nextStages.includes('Rejected')"
-                type="button"
-                class="hrms-btn hrms-btn--sm"
-                @click="openMoveModal('Rejected')"
-              >
-                Rejected
-              </button>
-              <p v-if="!nextStages.length" class="pipeline-aside__terminal">
-                No further stage changes (terminal stage).
-              </p>
-            </div>
 
             <h3 class="pipeline-aside__section">Stage history</h3>
             <div v-if="historyLoading" class="hrms-empty-inline">Loading history…</div>
@@ -762,6 +734,73 @@ function formatExp(years: number | null | undefined) {
             </ol>
             <p v-else class="hrms-empty-inline">No stage history yet.</p>
           </div>
+
+          <footer v-if="!panelCollapsed" class="pipeline-aside__footer">
+            <div
+              v-if="primaryStage || isInterviewStage || nextStages.length"
+              class="pipeline-aside__footer-actions"
+            >
+              <button
+                v-if="isInterviewStage"
+                type="button"
+                class="hrms-btn hrms-btn--primary"
+                :disabled="!canAdvanceInterview"
+                :title="
+                  !canAdvanceInterview
+                    ? 'Interview must finish or be cancelled before advancing'
+                    : undefined
+                "
+                @click="continueInterview"
+              >
+                Continue
+              </button>
+              <button
+                v-else-if="primaryStage"
+                type="button"
+                class="hrms-btn hrms-btn--primary"
+                @click="openMoveModal(primaryStage)"
+              >
+                {{ actionLabel(primaryStage) }}
+              </button>
+              <div class="pipeline-aside__more">
+                <button
+                  v-if="nextStages.includes('On Hold') || nextStages.includes('Rejected')"
+                  type="button"
+                  class="hrms-btn"
+                  :aria-expanded="showMoreMenu"
+                  @click="toggleMoreMenu"
+                >
+                  More
+                </button>
+                <div v-if="showMoreMenu" class="pipeline-aside__more-menu">
+                  <button
+                    v-if="nextStages.includes('On Hold')"
+                    type="button"
+                    @click="openMoreMove('On Hold')"
+                  >
+                    Put on hold
+                  </button>
+                  <button
+                    v-if="nextStages.includes('Rejected')"
+                    type="button"
+                    class="pipeline-aside__more-danger"
+                    @click="openMoreMove('Rejected')"
+                  >
+                    Reject candidate
+                  </button>
+                </div>
+              </div>
+            </div>
+            <p
+              v-if="isInterviewStage && !canAdvanceInterview"
+              class="pipeline-aside__footer-hint"
+            >
+              Continue unlocks after the scheduled interview time.
+            </p>
+            <p v-if="!primaryStage && !isInterviewStage && !nextStages.length" class="pipeline-aside__terminal">
+              No further stage changes (terminal stage).
+            </p>
+          </footer>
         </aside>
       </Transition>
     </div>
@@ -832,6 +871,96 @@ function formatExp(years: number | null | undefined) {
           @click="confirmMove"
         >
           {{ moving ? 'Updating…' : confirmMoveLabel }}
+        </button>
+      </template>
+    </HrmsModal>
+
+    <HrmsModal v-model="showInterviewPicker" title="Manage interview" size="md">
+      <div class="pipeline-picker">
+        <button
+          v-if="canChangeInterviewDate"
+          type="button"
+          :class="{ 'pipeline-picker__option--selected': pickedInterviewAction === 'change_date' }"
+          class="pipeline-picker__option"
+          @click="pickedInterviewAction = 'change_date'"
+        >
+          <strong>Change date</strong>
+          <span>Update the upcoming interview schedule.</span>
+        </button>
+        <button
+          v-if="canCancelInterview"
+          type="button"
+          :class="{ 'pipeline-picker__option--selected': pickedInterviewAction === 'cancel' }"
+          class="pipeline-picker__option"
+          @click="pickedInterviewAction = 'cancel'"
+        >
+          <strong>Cancel interview</strong>
+          <span>Keep the candidate in Interview and allow the next stage.</span>
+        </button>
+        <button
+          v-if="canMarkNoShow"
+          type="button"
+          :class="{ 'pipeline-picker__option--selected': pickedInterviewAction === 'no_show' }"
+          class="pipeline-picker__option"
+          @click="pickedInterviewAction = 'no_show'"
+        >
+          <strong>Mark no show</strong>
+          <span>Record that the candidate did not attend.</span>
+        </button>
+        <button
+          v-if="canRescheduleInterview"
+          type="button"
+          :class="{ 'pipeline-picker__option--selected': pickedInterviewAction === 'reschedule' }"
+          class="pipeline-picker__option"
+          @click="pickedInterviewAction = 'reschedule'"
+        >
+          <strong>Reschedule interview</strong>
+          <span>Set a new time for the latest round.</span>
+        </button>
+      </div>
+      <template #footer>
+        <button type="button" class="hrms-btn" @click="showInterviewPicker = false">Cancel</button>
+        <button
+          type="button"
+          class="hrms-btn hrms-btn--primary"
+          :disabled="!pickedInterviewAction"
+          @click="confirmInterviewActionPick"
+        >
+          Continue
+        </button>
+      </template>
+    </HrmsModal>
+
+    <HrmsModal v-model="showStagePicker" title="Continue candidate" size="md">
+      <div class="pipeline-picker">
+        <button
+          type="button"
+          :class="{ 'pipeline-picker__option--selected': pickedStage === 'Interview' }"
+          class="pipeline-picker__option"
+          @click="pickedStage = 'Interview'"
+        >
+          <strong>Next interview round</strong>
+          <span>Schedule another interview round.</span>
+        </button>
+        <button
+          type="button"
+          :class="{ 'pipeline-picker__option--selected': pickedStage === 'Offer' }"
+          class="pipeline-picker__option"
+          @click="pickedStage = 'Offer'"
+        >
+          <strong>Move to offer</strong>
+          <span>Prepare the candidate’s offer details.</span>
+        </button>
+      </div>
+      <template #footer>
+        <button type="button" class="hrms-btn" @click="showStagePicker = false">Cancel</button>
+        <button
+          type="button"
+          class="hrms-btn hrms-btn--primary"
+          :disabled="!pickedStage"
+          @click="confirmStagePick"
+        >
+          Continue
         </button>
       </template>
     </HrmsModal>
@@ -996,6 +1125,9 @@ function formatExp(years: number | null | undefined) {
 }
 
 .pipeline-aside {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   transition: width 0.25s ease, min-width 0.25s ease, max-width 0.25s ease;
 }
 
@@ -1030,7 +1162,7 @@ function formatExp(years: number | null | undefined) {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 18px 24px;
+  padding: 8px 18px 20px;
 }
 
 .pipeline-aside__identity {
@@ -1042,9 +1174,62 @@ function formatExp(years: number | null | undefined) {
   margin: 16px 0;
 }
 
-.pipeline-aside__actions {
-  margin-bottom: 20px;
-  flex-wrap: wrap;
+.pipeline-aside__footer {
+  position: relative;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--hrms-border);
+  background: var(--hrms-surface, #fff);
+  flex-shrink: 0;
+}
+
+.pipeline-aside__footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pipeline-aside__footer-hint {
+  margin: 8px 0 0;
+  font-size: 0.76rem;
+  color: var(--hrms-text-muted);
+}
+
+.pipeline-aside__more {
+  position: relative;
+}
+
+.pipeline-aside__more-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 3;
+  min-width: 148px;
+  padding: 5px;
+  border: 1px solid var(--hrms-border);
+  border-radius: 10px;
+  background: var(--hrms-surface, #fff);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.14);
+}
+
+.pipeline-aside__more-menu button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--hrms-text);
+  text-align: left;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.pipeline-aside__more-menu button:hover {
+  background: var(--hrms-surface-muted, #f8fafc);
+}
+
+.pipeline-aside__more-menu .pipeline-aside__more-danger {
+  color: var(--hrms-danger, #dc2626);
 }
 
 .pipeline-aside__break {
@@ -1061,6 +1246,84 @@ function formatExp(years: number | null | undefined) {
 .pipeline-aside__section {
   margin: 0 0 10px;
   font-size: 0.9rem;
+}
+
+.pipeline-interviews {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 20px;
+  padding: 0;
+}
+
+.pipeline-interviews li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--hrms-border);
+  border-radius: 10px;
+  color: var(--hrms-text-muted);
+  font-size: 0.78rem;
+}
+
+.pipeline-interviews__item--latest {
+  border-color: color-mix(in srgb, var(--hrms-primary) 40%, var(--hrms-border));
+  background: color-mix(in srgb, var(--hrms-primary) 5%, var(--hrms-surface, #fff));
+}
+
+.pipeline-interviews__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--hrms-text);
+}
+
+.pipeline-interviews__status {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--hrms-surface-muted, #f1f5f9);
+  color: var(--hrms-text-muted);
+  font-size: 0.68rem;
+  font-weight: 650;
+  text-transform: capitalize;
+}
+
+.pipeline-interviews__manage {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.pipeline-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pipeline-picker__option {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--hrms-border);
+  border-radius: 10px;
+  background: var(--hrms-surface, #fff);
+  color: var(--hrms-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pipeline-picker__option span {
+  color: var(--hrms-text-muted);
+  font-size: 0.8rem;
+}
+
+.pipeline-picker__option--selected {
+  border-color: var(--hrms-primary);
+  background: color-mix(in srgb, var(--hrms-primary) 7%, var(--hrms-surface, #fff));
 }
 
 .pipeline-aside__rail {
