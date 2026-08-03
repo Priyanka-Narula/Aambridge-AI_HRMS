@@ -7,6 +7,7 @@ import type {
   RecruiterPerformancePeriod,
   RecruiterPerformanceResponse,
 } from '@/types/dashboard'
+import type { CommandCenterData, CommandCenterFilters } from '@/types/commandCenter'
 
 export async function fetchAnalyticsDashboard(params?: {
   start?: string
@@ -36,6 +37,15 @@ export async function fetchRecruiterPerformance(params?: {
     '/api/v1/dashboard/recruiter-performance',
     { params },
   )
+  return data
+}
+
+export async function fetchCommandCenter(
+  params?: CommandCenterFilters,
+): Promise<CommandCenterData> {
+  const { data } = await apiClient.get<CommandCenterData>('/api/v1/dashboard/command-center', {
+    params,
+  })
   return data
 }
 

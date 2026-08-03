@@ -158,7 +158,7 @@ function actionLabel(stage: string) {
     return 'Move to Offer'
   }
   if (selected.value?.current_stage === 'On Hold') return `Resume: ${stage}`
-  return `Next: ${stage}`
+  return `${stage}`
 }
 
 const moveModalTitle = computed(() => actionLabel(targetStage.value) || 'Update pipeline stage')

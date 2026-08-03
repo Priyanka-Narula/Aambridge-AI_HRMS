@@ -2,9 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { fetchAnalyticsDashboard } from '@/api/dashboard'
 import BarChart from '@/components/dashboard/BarChart.vue'
-import DonutChart from '@/components/dashboard/DonutChart.vue'
-import LineChart from '@/components/dashboard/LineChart.vue'
-import RecruiterPerformance from '@/components/dashboard/RecruiterPerformance.vue'
+import OwnerCommandCenter from '@/components/dashboard/command/OwnerCommandCenter.vue'
 import HrmsAlert from '@/components/ui/HrmsAlert.vue'
 import { useAttendanceStore } from '@/stores/attendance'
 import { useAuthStore } from '@/stores/auth'
@@ -52,10 +50,10 @@ const cards = computed(() => {
   ]
 })
 
-const heroTitle = computed(() => (isOwner.value ? 'Owner Dashboard' : 'Recruiter Dashboard'))
+const heroTitle = computed(() => (isOwner.value ? 'Executive Command Center' : 'Recruiter Dashboard'))
 const heroSubtitle = computed(() =>
   isOwner.value
-    ? "Welcome back. Here's what's happening with your HR operations."
+    ? 'Understand business health, recruiter load, and what needs action today.'
     : "Here's your personal hiring snapshot for today.",
 )
 
@@ -141,7 +139,14 @@ function str(v: unknown) {
   return v == null ? '—' : String(v)
 }
 
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
+
 async function load(widgets?: string[]) {
+  // Owners use the command-center endpoint; skip the legacy analytics fan-out.
+  if (auth.role === 'owner' || isOwner.value) {
+    loading.value = false
+    return
+  }
   if (!widgets?.length) loading.value = true
   error.value = ''
   try {
@@ -162,9 +167,20 @@ async function load(widgets?: string[]) {
   }
 }
 
+function bumpCommandCenterRefresh() {
+  if (refreshTimer) clearTimeout(refreshTimer)
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null
+    recruiterPerformanceRefreshKey.value += 1
+  }, 800)
+}
+
 function onSocketEvent(event: DashboardWsEvent) {
   if (event.type === 'connected') return
-  recruiterPerformanceRefreshKey.value += 1
+  if (auth.role === 'owner' || isOwner.value) {
+    bumpCommandCenterRefresh()
+    return
+  }
   void load(event.widgets)
 }
 
@@ -173,6 +189,10 @@ let unsubscribeLive: (() => void) | undefined
 watch(
   () => [auth.dateRange.start, auth.dateRange.end],
   () => {
+    if (auth.role === 'owner' || isOwner.value) {
+      bumpCommandCenterRefresh()
+      return
+    }
     void load()
   },
 )
@@ -181,7 +201,12 @@ const now = ref(new Date())
 let clockTimer: ReturnType<typeof setInterval>
 
 function onVisible() {
-  if (document.visibilityState === 'visible') void load()
+  if (document.visibilityState !== 'visible') return
+  if (auth.role === 'owner' || isOwner.value) {
+    bumpCommandCenterRefresh()
+    return
+  }
+  void load()
 }
 
 onMounted(async () => {
@@ -191,7 +216,7 @@ onMounted(async () => {
   unsubscribeLive = live.subscribe(onSocketEvent)
   document.addEventListener('visibilitychange', onVisible)
   await Promise.all([
-    load(),
+    auth.role === 'owner' ? Promise.resolve() : load(),
     attendance.fetchMyToday(),
     attendance.fetchPolicy(),
     auth.role === 'owner' ? attendance.fetchAllToday() : Promise.resolve(),
@@ -199,6 +224,7 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   clearInterval(clockTimer)
+  if (refreshTimer) clearTimeout(refreshTimer)
   unsubscribeLive?.()
   document.removeEventListener('visibilitychange', onVisible)
 })
@@ -314,43 +340,33 @@ const statusClass: Record<string, string> = {
       </ul>
     </section>
 
-    <HrmsAlert v-if="error" type="error" dismissible @dismiss="error = ''">{{ error }}</HrmsAlert>
+    <HrmsAlert v-if="error && !isOwner" type="error" dismissible @dismiss="error = ''">{{ error }}</HrmsAlert>
 
-    <section v-if="loading && !data" class="analytics__loading">Loading analytics…</section>
+    <OwnerCommandCenter
+      v-if="isOwner"
+      :start="auth.dateRange.start || undefined"
+      :end="auth.dateRange.end || undefined"
+      :refresh-key="recruiterPerformanceRefreshKey"
+    />
 
-    <section v-else-if="!data" class="analytics__loading">
-      {{ error || 'No analytics data available.' }}
-    </section>
-
-    <template v-else-if="data">
-      <section class="kpi-grid" :class="{ 'is-flash': flash.has('kpis') }">
-        <article v-for="card in cards" :key="card.label" class="kpi">
-          <div class="kpi__head">
-            <span class="kpi__label">{{ card.label }}</span>
-            <span class="kpi__icon">{{ kpiMeta[card.label]?.icon ?? '•' }}</span>
-          </div>
-          <strong class="kpi__value">{{ card.value }}</strong>
-          <span class="kpi__hint">{{ kpiMeta[card.label]?.hint ?? 'Live metric' }}</span>
-        </article>
+    <template v-else>
+      <section v-if="loading && !data" class="analytics__loading">Loading analytics…</section>
+      <section v-else-if="!data" class="analytics__loading">
+        {{ error || 'No analytics data available.' }}
       </section>
-
-      <section class="chart-grid">
-        <template v-if="isOwner">
-          <article class="chart-card" :class="{ 'is-flash': flash.has('candidate_status') }">
-            <header class="chart-card__head"><h2>Candidates by stage</h2></header>
-            <DonutChart compact :items="pipelineBars" />
+      <template v-else>
+        <section class="kpi-grid" :class="{ 'is-flash': flash.has('kpis') }">
+          <article v-for="card in cards" :key="card.label" class="kpi">
+            <div class="kpi__head">
+              <span class="kpi__label">{{ card.label }}</span>
+              <span class="kpi__icon">{{ kpiMeta[card.label]?.icon ?? '•' }}</span>
+            </div>
+            <strong class="kpi__value">{{ card.value }}</strong>
+            <span class="kpi__hint">{{ kpiMeta[card.label]?.hint ?? 'Live metric' }}</span>
           </article>
-          <article class="chart-card" :class="{ 'is-flash': flash.has('placements_monthly') }">
-            <header class="chart-card__head"><h2>Placements trend</h2><span>View report</span></header>
-            <LineChart compact :items="data.charts.placements_monthly" color="#7c3aed" />
-          </article>
-          <RecruiterPerformance
-            :class="{ 'is-flash': flash.has('recruiter_performance') }"
-            :refresh-key="recruiterPerformanceRefreshKey"
-          />
-        </template>
+        </section>
 
-        <template v-else>
+        <section class="chart-grid">
           <article class="chart-card" :class="{ 'is-flash': flash.has('pipeline_stages') }">
             <header class="chart-card__head"><h2>My candidates by stage</h2></header>
             <BarChart compact :items="pipelineBars" color="#4f46e5" />
@@ -391,121 +407,64 @@ const statusClass: Record<string, string> = {
               </li>
             </ul>
           </article>
-        </template>
-      </section>
+        </section>
 
-      <section class="table-grid">
-        <article
-          v-if="isOwner"
-          class="panel"
-          :class="{ 'is-flash': flash.has('client_placements') }"
-        >
-          <header class="panel__head"><h2>Top clients by placements</h2></header>
-          <ul class="list">
-            <li v-for="row in data.charts.client_placements.slice(0, 6)" :key="row.label">
-              <div>
-                <strong>{{ row.label }}</strong>
-                <span>Client</span>
-              </div>
-              <em>{{ row.value }}</em>
-            </li>
-          </ul>
-        </article>
+        <section class="table-grid">
+          <article class="panel" :class="{ 'is-flash': flash.has('recent_placements') }">
+            <header class="panel__head"><h2>Recent placements</h2><span>View all</span></header>
+            <div v-if="!data.tables.recent_placements.length" class="empty">No placements yet</div>
+            <ul v-else class="list">
+              <li v-for="row in data.tables.recent_placements" :key="str(row.id)">
+                <div>
+                  <strong>{{ str(row.candidate_name) }}</strong>
+                  <span>{{ str(row.client_name) }} · {{ str(row.job_title) }}</span>
+                </div>
+                <em>{{ formatWhen(row.joined_date) }}</em>
+              </li>
+            </ul>
+          </article>
 
-        <article class="panel" :class="{ 'is-flash': flash.has('recent_placements') }">
-          <header class="panel__head"><h2>Recent placements</h2><span>View all</span></header>
-          <div v-if="!data.tables.recent_placements.length" class="empty">No placements yet</div>
-          <ul v-else class="list">
-            <li v-for="row in data.tables.recent_placements" :key="str(row.id)">
-              <div>
-                <strong>{{ str(row.candidate_name) }}</strong>
-                <span>{{ str(row.client_name) }} · {{ str(row.job_title) }}</span>
-              </div>
-              <em>{{ formatWhen(row.joined_date) }}</em>
-            </li>
-          </ul>
-        </article>
+          <article class="panel" :class="{ 'is-flash': flash.has('recent_candidates') }">
+            <header class="panel__head"><h2>Recently uploaded</h2><span>Latest</span></header>
+            <ul class="list">
+              <li v-for="row in data.tables.recent_candidates" :key="str(row.id)">
+                <div>
+                  <strong>{{ str(row.name) }}</strong>
+                  <span>{{ str(row.email) }}</span>
+                </div>
+                <em>{{ str(row.status) }}</em>
+              </li>
+            </ul>
+          </article>
 
-        <article v-if="isOwner" class="panel" :class="{ 'is-flash': flash.has('recent_activities') }">
-          <header class="panel__head"><h2>Activity feed</h2><span>View all</span></header>
-          <ul class="list">
-            <li v-for="row in data.tables.recent_activities" :key="str(row.id)">
-              <div>
-                <strong>{{ str(row.title) }}</strong>
-                <span>{{ str(row.description) }}</span>
-              </div>
-              <em>{{ formatWhen(row.created_at) }}</em>
-            </li>
-          </ul>
-        </article>
+          <article class="panel" :class="{ 'is-flash': flash.has('todays_interviews') }">
+            <header class="panel__head"><h2>Today's interviews</h2><span>Schedule</span></header>
+            <div v-if="!data.tables.todays_interviews.length" class="empty">No interviews today</div>
+            <ul v-else class="list">
+              <li v-for="row in data.tables.todays_interviews" :key="str(row.id)">
+                <div>
+                  <strong>{{ str(row.candidate_name) }}</strong>
+                  <span>{{ str(row.job_title) }}</span>
+                </div>
+                <em>{{ formatWhen(row.scheduled_at) }}</em>
+              </li>
+            </ul>
+          </article>
 
-        <article
-          v-if="!isOwner"
-          class="panel"
-          :class="{ 'is-flash': flash.has('recent_candidates') }"
-        >
-          <header class="panel__head"><h2>Recently uploaded</h2><span>Latest</span></header>
-          <ul class="list">
-            <li v-for="row in data.tables.recent_candidates" :key="str(row.id)">
-              <div>
-                <strong>{{ str(row.name) }}</strong>
-                <span>{{ str(row.email) }}</span>
-              </div>
-              <em>{{ str(row.status) }}</em>
-            </li>
-          </ul>
-        </article>
-
-        <article v-if="isOwner" class="panel" :class="{ 'is-flash': flash.has('pending_tasks') }">
-          <header class="panel__head"><h2>{{ isOwner ? 'Pending reviews' : 'My tasks' }}</h2></header>
-          <div v-if="!data.tables.pending_tasks.length" class="empty">All caught up</div>
-          <ul v-else class="list">
-            <li v-for="row in data.tables.pending_tasks" :key="str(row.id)">
-              <div>
-                <strong>{{ str(row.title) }}</strong>
-                <span>{{ str(row.subtitle) }}</span>
-              </div>
-              <em>{{ formatWhen(row.created_at) }}</em>
-            </li>
-          </ul>
-        </article>
-
-        <article
-          v-if="!isOwner"
-          class="panel"
-          :class="{ 'is-flash': flash.has('todays_interviews') }"
-        >
-          <header class="panel__head"><h2>Today's interviews</h2><span>Schedule</span></header>
-          <div v-if="!data.tables.todays_interviews.length" class="empty">No interviews today</div>
-          <ul v-else class="list">
-            <li v-for="row in data.tables.todays_interviews" :key="str(row.id)">
-              <div>
-                <strong>{{ str(row.candidate_name) }}</strong>
-                <span>{{ str(row.job_title) }}</span>
-              </div>
-              <em>{{ formatWhen(row.scheduled_at) }}</em>
-            </li>
-          </ul>
-        </article>
-
-        <article
-          v-if="!isOwner"
-          class="panel"
-          :class="{ 'is-flash': flash.has('recent_feedback') }"
-        >
-          <header class="panel__head"><h2>Recent feedback</h2></header>
-          <div v-if="!data.tables.recent_feedback.length" class="empty">No feedback yet</div>
-          <ul v-else class="list">
-            <li v-for="row in data.tables.recent_feedback" :key="str(row.id)">
-              <div>
-                <strong>{{ str(row.candidate_name) }}</strong>
-                <span>{{ str(row.feedback) }}</span>
-              </div>
-            </li>
-          </ul>
-        </article>
-
-      </section>
+          <article class="panel" :class="{ 'is-flash': flash.has('recent_feedback') }">
+            <header class="panel__head"><h2>Recent feedback</h2></header>
+            <div v-if="!data.tables.recent_feedback.length" class="empty">No feedback yet</div>
+            <ul v-else class="list">
+              <li v-for="row in data.tables.recent_feedback" :key="str(row.id)">
+                <div>
+                  <strong>{{ str(row.candidate_name) }}</strong>
+                  <span>{{ str(row.feedback) }}</span>
+                </div>
+              </li>
+            </ul>
+          </article>
+        </section>
+      </template>
     </template>
   </div>
 </template>
@@ -515,7 +474,7 @@ const statusClass: Record<string, string> = {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  max-width: 1280px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 6px;
 }

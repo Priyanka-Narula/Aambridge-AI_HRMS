@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSock
 from jose import JWTError
 from sqlalchemy.orm import Session, joinedload
 
+from app.api.schemas.command_center import CommandCenterResponse
 from app.api.schemas.dashboard import (
     AnalyticsDashboardResponse,
     DashboardNotificationsResponse,
@@ -16,7 +17,7 @@ from app.core.database import SessionLocal, get_db
 from app.core.deps import get_current_user
 from app.core.security import ROLE_OWNER, decode_access_token, normalize_role
 from app.models.user_access import User
-from app.services import dashboard_service
+from app.services import command_center_service, dashboard_service
 from app.services.dashboard_events import dashboard_hub
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -50,6 +51,35 @@ def recruiter_performance(
         db,
         period=period,
         industry=industry,
+    )
+
+
+@router.get("/command-center", response_model=CommandCenterResponse)
+def command_center(
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
+    trend_grain: Literal["weekly", "monthly", "quarterly", "yearly"] = Query(default="monthly"),
+    recruiter_id: UUID | None = Query(default=None),
+    client_id: UUID | None = Query(default=None),
+    department: str | None = Query(default=None),
+    job_status: str | None = Query(default=None),
+    location: str | None = Query(default=None),
+    activity_limit: int = Query(default=5, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return command_center_service.get_command_center(
+        db,
+        current_user,
+        start=start,
+        end=end,
+        trend_grain=trend_grain,
+        recruiter_id=recruiter_id,
+        client_id=client_id,
+        department=department,
+        job_status=job_status,
+        location=location,
+        activity_limit=activity_limit,
     )
 
 
@@ -128,8 +158,10 @@ async def dashboard_ws(websocket: WebSocket, token: str | None = None):
         try:
             await websocket.send_json({"type": "connected", "widgets": []})
             while True:
-                # Keep-alive / ignore client pings
-                await websocket.receive_text()
+                message = await websocket.receive()
+                if message.get("type") == "websocket.disconnect":
+                    break
+                # Ignore client keep-alive pings / text frames.
         except WebSocketDisconnect:
             pass
         finally:

@@ -26,8 +26,20 @@ class DashboardEventHub:
 
     async def connect(self, user_id: str, websocket: WebSocket) -> None:
         await websocket.accept()
+        stale: list[WebSocket] = []
         async with self._lock:
-            self._connections.setdefault(user_id, set()).add(websocket)
+            existing = self._connections.setdefault(user_id, set())
+            # Keep a single live socket per user to avoid Windows socket exhaustion.
+            for old in list(existing):
+                if old is not websocket:
+                    stale.append(old)
+                    existing.discard(old)
+            existing.add(websocket)
+        for old in stale:
+            try:
+                await old.close(code=1000)
+            except Exception:
+                logger.debug("Failed closing replaced dashboard websocket for %s", user_id)
 
     async def disconnect(self, user_id: str, websocket: WebSocket) -> None:
         async with self._lock:
