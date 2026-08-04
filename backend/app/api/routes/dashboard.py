@@ -64,7 +64,7 @@ def command_center(
     department: str | None = Query(default=None),
     job_status: str | None = Query(default=None),
     location: str | None = Query(default=None),
-    activity_limit: int = Query(default=5, ge=1, le=100),
+    activity_limit: int = Query(default=5, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

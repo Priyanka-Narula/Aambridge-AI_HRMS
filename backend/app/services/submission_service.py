@@ -447,7 +447,10 @@ def get_owner_dashboard(db: Session, current_user: User) -> list[dict]:
     if jr_ids:
         for jr in (
             db.query(JobRequirement)
-            .options(joinedload(JobRequirement.client))
+            .options(
+                joinedload(JobRequirement.client),
+                joinedload(JobRequirement.assignee),
+            )
             .filter(JobRequirement.id.in_(jr_ids))
             .all()
         ):
@@ -482,11 +485,29 @@ def get_owner_dashboard(db: Session, current_user: User) -> list[dict]:
                 serialize_submission(app, jr, candidate)
                 for app, _, candidate in job_to_apps.get(jr_id, [])
             ]
+            assignee = jr.assignee
+            assignee_name = None
+            if assignee:
+                assignee_name = f"{assignee.first_name} {assignee.last_name}".strip()
             jobs_out.append({
                 "job_requirement_id": jr.id,
                 "job_title": jr.job_title,
                 "status": jr.status,
                 "open_positions": jr.open_positions,
+                "department": jr.department,
+                "employment_type": jr.employment_type,
+                "work_mode": jr.work_mode,
+                "experience_min": float(jr.experience_min) if jr.experience_min is not None else None,
+                "experience_max": float(jr.experience_max) if jr.experience_max is not None else None,
+                "salary_min": float(jr.salary_min) if jr.salary_min is not None else None,
+                "salary_max": float(jr.salary_max) if jr.salary_max is not None else None,
+                "location": jr.location,
+                "priority": jr.priority,
+                "requirement_type": jr.requirement_type,
+                "job_description": jr.job_description,
+                "assigned_to": jr.assigned_to,
+                "assigned_recruiter_name": assignee_name,
+                "created_at": jr.created_at,
                 "submissions": submissions_out,
             })
         result.append({

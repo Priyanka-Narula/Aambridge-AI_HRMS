@@ -14,6 +14,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user, require_owner
 from app.models.attendance import AttendanceRecord
 from app.models.user_access import Role, User
+from app.services.dashboard_events import publish_dashboard_event
 
 router = APIRouter(prefix="/api/v1/attendance", tags=["attendance"])
 
@@ -102,6 +103,11 @@ def check_in(
     record.check_in = _now_utc()
     db.commit()
     db.refresh(record)
+    publish_dashboard_event(
+        "attendance.checked_in",
+        ["activity_feed"],
+        {"user_id": str(current_user.id)},
+    )
     return _serialize(record, today)
 
 
@@ -131,6 +137,11 @@ def check_out(
     record.check_out = _now_utc()
     db.commit()
     db.refresh(record)
+    publish_dashboard_event(
+        "attendance.checked_out",
+        ["activity_feed"],
+        {"user_id": str(current_user.id)},
+    )
     return _serialize(record, today)
 
 

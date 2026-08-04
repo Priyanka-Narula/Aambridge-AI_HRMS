@@ -31,6 +31,20 @@ export interface OwnerDashboardJob {
   job_title: string
   status: string
   open_positions: number | null
+  department?: string | null
+  employment_type?: string | null
+  work_mode?: string | null
+  experience_min?: number | null
+  experience_max?: number | null
+  salary_min?: number | null
+  salary_max?: number | null
+  location?: string | null
+  priority?: string | null
+  requirement_type?: string | null
+  job_description?: string | null
+  assigned_to?: string | null
+  assigned_recruiter_name?: string | null
+  created_at?: string | null
   submissions: CandidateSubmission[]
 }
 

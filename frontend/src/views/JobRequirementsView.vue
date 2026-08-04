@@ -47,7 +47,6 @@ type FormState = {
   employment_type: string
   work_mode: string
   experience_min: string
-  experience_max: string
   salary_min: string
   salary_max: string
   open_positions: string
@@ -55,7 +54,6 @@ type FormState = {
   location: string
   priority: string
   requirement_type: string
-  status: JobRequirementStatus
 }
 
 const emptyForm = (): FormState => ({
@@ -66,7 +64,6 @@ const emptyForm = (): FormState => ({
   employment_type: '',
   work_mode: '',
   experience_min: '',
-  experience_max: '',
   salary_min: '',
   salary_max: '',
   open_positions: '',
@@ -74,7 +71,6 @@ const emptyForm = (): FormState => ({
   location: '',
   priority: '',
   requirement_type: '',
-  status: 'open',
 })
 
 const form = ref<FormState>(emptyForm())
@@ -122,7 +118,6 @@ function toPayload(): JobRequirementCreatePayload {
     employment_type: optionalText(form.value.employment_type),
     work_mode: optionalText(form.value.work_mode),
     experience_min: toNumberOrNull(form.value.experience_min),
-    experience_max: toNumberOrNull(form.value.experience_max),
     salary_min: toNumberOrNull(form.value.salary_min),
     salary_max: toNumberOrNull(form.value.salary_max),
     open_positions: toNumberOrNull(form.value.open_positions),
@@ -130,7 +125,6 @@ function toPayload(): JobRequirementCreatePayload {
     location: optionalText(form.value.location),
     priority: optionalText(form.value.priority),
     requirement_type: optionalText(form.value.requirement_type),
-    status: form.value.status,
   }
 }
 
@@ -143,7 +137,6 @@ function itemToForm(item: JobRequirementListItem): FormState {
     employment_type: item.employment_type ?? '',
     work_mode: item.work_mode ?? '',
     experience_min: item.experience_min != null ? String(item.experience_min) : '',
-    experience_max: item.experience_max != null ? String(item.experience_max) : '',
     salary_min: item.salary_min != null ? String(item.salary_min) : '',
     salary_max: item.salary_max != null ? String(item.salary_max) : '',
     open_positions: item.open_positions != null ? String(item.open_positions) : '',
@@ -151,7 +144,6 @@ function itemToForm(item: JobRequirementListItem): FormState {
     location: item.location ?? '',
     priority: item.priority ?? '',
     requirement_type: item.requirement_type ?? '',
-    status: (item.status as JobRequirementStatus) || 'open',
   }
 }
 
@@ -541,10 +533,6 @@ function experienceLabel(item: JobRequirementListItem): string {
           <input v-model="form.experience_min" class="hrms-input" type="number" min="0" step="0.5" />
         </label>
         <label class="hrms-field">
-          <span class="hrms-label">Experience max (yrs)</span>
-          <input v-model="form.experience_max" class="hrms-input" type="number" min="0" step="0.5" />
-        </label>
-        <label class="hrms-field">
           <span class="hrms-label">Open positions</span>
           <input v-model="form.open_positions" class="hrms-input" type="number" min="1" step="1" />
         </label>
@@ -555,15 +543,6 @@ function experienceLabel(item: JobRequirementListItem): string {
             <option value="high">High</option>
             <option value="medium">Medium</option>
             <option value="low">Low</option>
-          </select>
-        </label>
-        <label class="hrms-field">
-          <span class="hrms-label">Status</span>
-          <select v-model="form.status" class="hrms-input hrms-select">
-            <option value="open">Open</option>
-            <option value="on_hold">On hold</option>
-            <option value="filled">Filled</option>
-            <option value="closed">Closed</option>
           </select>
         </label>
         <label class="hrms-field hrms-field--wide">

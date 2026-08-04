@@ -41,6 +41,7 @@ const allActivities = ref<ActivityItem[]>([])
 const showAllActivities = ref(false)
 const loadingAllActivities = ref(false)
 const allActivitiesError = ref('')
+const activityHistoryPeriod = ref<'day' | 'week' | 'month'>('month')
 
 const filters = computed<CommandCenterFilters>(() => ({
   start: props.start,
@@ -85,6 +86,58 @@ const maxFunnel = computed(() =>
   Math.max(...(data.value?.hiring_funnel.stages.map((s) => s.count) ?? [1]), 1),
 )
 
+function dateAtStart(value: string) {
+  const [year = 1970, month = 1, day = 1] = value.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+function startOfDay(date: Date) {
+  const result = new Date(date)
+  result.setHours(0, 0, 0, 0)
+  return result
+}
+
+function endOfDay(date: Date) {
+  const result = new Date(date)
+  result.setHours(23, 59, 59, 999)
+  return result
+}
+
+const activityHistoryRange = computed(() => {
+  const today = new Date()
+  const selectedStart = props.start ? startOfDay(dateAtStart(props.start)) : startOfDay(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 30))
+  const selectedEnd = props.end ? endOfDay(dateAtStart(props.end)) : endOfDay(today)
+
+  let periodStart: Date
+  let periodEnd: Date
+  if (activityHistoryPeriod.value === 'day') {
+    periodStart = startOfDay(today)
+    periodEnd = endOfDay(today)
+  } else if (activityHistoryPeriod.value === 'week') {
+    const daysSinceSunday = today.getDay()
+    periodStart = startOfDay(new Date(today.getFullYear(), today.getMonth(), today.getDate() - daysSinceSunday))
+    periodEnd = endOfDay(new Date(periodStart.getFullYear(), periodStart.getMonth(), periodStart.getDate() + 6))
+  } else {
+    periodStart = startOfDay(new Date(today.getFullYear(), today.getMonth(), 1))
+    periodEnd = endOfDay(new Date(today.getFullYear(), today.getMonth() + 1, 0))
+  }
+
+  return {
+    start: new Date(Math.max(selectedStart.getTime(), periodStart.getTime())),
+    end: new Date(Math.min(selectedEnd.getTime(), periodEnd.getTime())),
+  }
+})
+
+const visibleActivities = computed(() => {
+  const { start, end } = activityHistoryRange.value
+  if (start > end) return []
+  return allActivities.value.filter((item) => {
+    if (!item.time) return false
+    const time = new Date(item.time)
+    return !Number.isNaN(time.getTime()) && time >= start && time <= end
+  })
+})
+
 async function load() {
   loading.value = true
   error.value = ''
@@ -99,10 +152,15 @@ async function load() {
 
 async function openAllActivities() {
   showAllActivities.value = true
+  activityHistoryPeriod.value = 'month'
+  await loadAllActivities()
+}
+
+async function loadAllActivities() {
   loadingAllActivities.value = true
   allActivitiesError.value = ''
   try {
-    const response = await fetchCommandCenter({ ...filters.value, activity_limit: 100 })
+    const response = await fetchCommandCenter({ ...filters.value, activity_limit: 500 })
     allActivities.value = response.activity_feed
   } catch (err) {
     allActivitiesError.value =
@@ -180,6 +238,7 @@ function scheduleLoad() {
   loadTimer = setTimeout(() => {
     loadTimer = null
     void load()
+    if (showAllActivities.value) void loadAllActivities()
   }, 150)
 }
 
@@ -549,7 +608,7 @@ watch(
               <h2>Recruiter activity feed</h2>
               <p>Newest actions first</p>
             </div>
-            <button type="button" class="cc__view-all" @click="void openAllActivities">
+            <button type="button" class="cc__view-all" @click="void openAllActivities()">
               View all
             </button>
           </header>
@@ -596,16 +655,29 @@ watch(
     <HrmsModal v-model="showAllActivities" title="Recruiter activity history" size="lg">
       <p v-if="loadingAllActivities" class="cc__empty">Loading activity history…</p>
       <p v-else-if="allActivitiesError" class="cc__error">{{ allActivitiesError }}</p>
-      <ol v-else-if="allActivities.length" class="timeline activity-history">
-        <li v-for="item in allActivities" :key="item.id">
-          <time>{{ formatWhen(item.time) }}</time>
-          <div>
-            <strong>{{ item.actor || 'Team' }} · {{ item.title }}</strong>
-            <span>{{ item.description }}</span>
-          </div>
-        </li>
-      </ol>
-      <p v-else class="cc__empty">No completed recruiter activity found.</p>
+      <template v-else>
+        <div class="activity-history__periods" role="group" aria-label="Activity history period">
+          <button
+            v-for="period in (['day', 'week', 'month'] as const)"
+            :key="period"
+            type="button"
+            :class="{ 'is-active': activityHistoryPeriod === period }"
+            @click="activityHistoryPeriod = period"
+          >
+            {{ period }}
+          </button>
+        </div>
+        <ol v-if="visibleActivities.length" class="timeline activity-history">
+          <li v-for="item in visibleActivities" :key="item.id">
+            <time>{{ formatWhen(item.time) }}</time>
+            <div>
+              <strong>{{ item.actor || 'Team' }} · {{ item.title }}</strong>
+              <span>{{ item.description }}</span>
+            </div>
+          </li>
+        </ol>
+        <p v-else class="cc__empty">No recruiter activity in this period within the selected date range.</p>
+      </template>
     </HrmsModal>
   </div>
 </template>
@@ -933,6 +1005,29 @@ watch(
 }
 .timeline strong { display: block; font-size: 0.84rem; }
 .timeline span { color: var(--hrms-text-muted); font-size: 0.74rem; }
+.activity-history__periods {
+  display: inline-flex;
+  margin-bottom: 14px;
+  padding: 3px;
+  border: 1px solid var(--hrms-border);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.activity-history__periods button {
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--hrms-text-muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-transform: capitalize;
+}
+.activity-history__periods button.is-active {
+  background: #7c3aed;
+  color: #fff;
+}
 .activity-history { max-height: 65vh; overflow: auto; padding-right: 6px; }
 .alert-card {
   display: flex;

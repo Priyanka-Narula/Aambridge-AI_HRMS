@@ -139,8 +139,9 @@ class _FilterContext:
         self.prev_month_end = self.month_start - timedelta(days=1)
         self.prev_month_start = self.prev_month_end.replace(day=1)
         self.yesterday = today - timedelta(days=1)
-        self.week_end = today + timedelta(days=(6 - today.weekday()))
-        self.week_start = today - timedelta(days=today.weekday())
+        days_since_sunday = (today.weekday() + 1) % 7
+        self.week_start = today - timedelta(days=days_since_sunday)
+        self.week_end = self.week_start + timedelta(days=6)
 
 
 def _recruiter_user_id(db: Session, recruiter_id: uuid.UUID) -> uuid.UUID | None:
@@ -216,6 +217,26 @@ def _minmax(values: list[float], invert: bool = False) -> list[float]:
     if invert:
         return [round(((hi - v) / span) * 100, 1) for v in values]
     return [round(((v - lo) / span) * 100, 1) for v in values]
+
+
+def _expected_joins_this_week(db: Session, filters: _FilterContext) -> int:
+    """Count offer-stage candidates with an expected joining date this week."""
+    return int(
+        _apply_job_filters(
+            db.query(func.count(Offer.id))
+            .join(CandidateApplication, CandidateApplication.id == Offer.application_id)
+            .join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id)
+            .join(PipelineStage, PipelineStage.id == CandidateApplication.current_stage)
+            .filter(
+                PipelineStage.name == "Offer",
+                Offer.joining_date.is_not(None),
+                Offer.joining_date >= filters.week_start,
+                Offer.joining_date <= filters.week_end,
+            ),
+            filters,
+        ).scalar()
+        or 0
+    )
 
 
 def _executive_kpis(
@@ -443,7 +464,7 @@ def _candidate_placement_conversion(
 
 def _bucket_start(value: date, grain: Literal["weekly", "monthly", "quarterly", "yearly"]) -> date:
     if grain == "weekly":
-        return value - timedelta(days=value.weekday())
+        return value - timedelta(days=(value.weekday() + 1) % 7)
     if grain == "monthly":
         return value.replace(day=1)
     if grain == "quarterly":
@@ -743,11 +764,10 @@ def _recruiter_leaderboard(db: Session, filters: _FilterContext) -> list[dict]:
 
     for idx, row in enumerate(rows):
         score = (
-            0.35 * p_n[idx]
-            + 0.25 * i_n[idx]
+            0.60 * p_n[idx]
+            + 0.20 * i_n[idx]
             + 0.15 * a_n[idx]
-            + 0.15 * c_n[idx]
-            + 0.10 * t_n[idx]
+            + 0.05 * t_n[idx]
         )
         row["productivity_score"] = round(score, 1)
         jobs = row["assigned_jobs"]
@@ -1058,21 +1078,7 @@ def _pipeline_summary(db: Session, filters: _FilterContext) -> list[dict]:
         ).scalar()
         or 0
     )
-    joining_week = int(
-        _apply_job_filters(
-            db.query(func.count(Offer.id))
-            .join(CandidateApplication, CandidateApplication.id == Offer.application_id)
-            .join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id)
-            .filter(
-                Offer.joining_date.is_not(None),
-                Offer.joining_date >= filters.today,
-                Offer.joining_date <= filters.week_end,
-                Offer.status.in_(["pending", "accepted"]),
-            ),
-            filters,
-        ).scalar()
-        or 0
-    )
+    joining_week = _expected_joins_this_week(db, filters)
     on_hold = int(
         _apply_job_filters(
             db.query(func.count(CandidateApplication.id))
@@ -1103,20 +1109,100 @@ def _pipeline_summary(db: Session, filters: _FilterContext) -> list[dict]:
 
 
 def _activity_feed(db: Session, filters: _FilterContext, *, limit: int = 16) -> list[dict]:
-    # Data source: application stage history, users, candidates, pipeline stages, and interviews.
-    # Query intent: most recent completed hiring actions, limited by the requested count.
-    # Refresh: on request.
+    """Return real recruiter actions recorded during the selected date range."""
     events: list[dict] = []
     now = datetime.now(timezone.utc)
+
+    recruiter_rows = (
+        db.query(User)
+        .join(Recruiter, Recruiter.user_id == User.id)
+        .all()
+    )
+    recruiter_by_created_key: dict[str, User] = {}
+    for recruiter in recruiter_rows:
+        name = f"{recruiter.first_name} {recruiter.last_name}".strip()
+        for key in (str(recruiter.id), recruiter.email, name):
+            if key:
+                recruiter_by_created_key[key] = recruiter
+
+    candidate_q = (
+        db.query(Candidate)
+        .filter(
+            Candidate.created_at >= filters.start_dt,
+            Candidate.created_at <= filters.end_dt,
+            Candidate.created_at <= now,
+            Candidate.created_by.in_(recruiter_by_created_key),
+        )
+        .order_by(Candidate.created_at.desc())
+    )
+    if filters.recruiter_user_id:
+        candidate_q = candidate_q.filter(
+            Candidate.created_by.in_(
+                key
+                for key, recruiter in recruiter_by_created_key.items()
+                if recruiter.id == filters.recruiter_user_id
+            )
+        )
+    if any((filters.client_id, filters.department, filters.job_status, filters.location)):
+        candidate_q = _apply_job_filters(
+            candidate_q.join(
+                CandidateApplication, CandidateApplication.candidate_id == Candidate.id
+            ).join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id),
+            filters,
+        ).distinct()
+    for candidate in candidate_q.limit(limit).all():
+        actor = recruiter_by_created_key.get(candidate.created_by or "")
+        events.append(
+            {
+                "id": f"candidate-upload-{candidate.id}",
+                "time": candidate.created_at.isoformat() if candidate.created_at else None,
+                "actor": f"{actor.first_name} {actor.last_name}".strip() if actor else None,
+                "title": "Uploaded candidate",
+                "description": f"{candidate.first_name} {candidate.last_name}".strip(),
+                "type": "candidate.uploaded",
+            }
+        )
+
+    attendance_q = (
+        db.query(AttendanceRecord, User)
+        .join(User, User.id == AttendanceRecord.user_id)
+        .join(Recruiter, Recruiter.user_id == User.id)
+        .filter(Recruiter.status == "active", User.status == "active")
+    )
+    if filters.recruiter_user_id:
+        attendance_q = attendance_q.filter(AttendanceRecord.user_id == filters.recruiter_user_id)
+    for record, recruiter in attendance_q.all():
+        actor = f"{recruiter.first_name} {recruiter.last_name}".strip()
+        for event_type, event_time, title in (
+            ("attendance.check_in", record.check_in, "Checked in"),
+            ("attendance.check_out", record.check_out, "Checked out"),
+        ):
+            if not event_time or event_time < filters.start_dt or event_time > filters.end_dt or event_time > now:
+                continue
+            events.append(
+                {
+                    "id": f"{event_type}-{record.id}",
+                    "time": event_time.isoformat(),
+                    "actor": actor,
+                    "title": title,
+                    "description": "Attendance recorded",
+                    "type": event_type,
+                }
+            )
 
     stage_q = (
         db.query(ApplicationStageHistory, User, Candidate, PipelineStage)
         .join(User, User.id == ApplicationStageHistory.moved_by)
+        .join(Recruiter, Recruiter.user_id == User.id)
         .join(CandidateApplication, CandidateApplication.id == ApplicationStageHistory.application_id)
         .join(Candidate, Candidate.id == CandidateApplication.candidate_id)
         .join(PipelineStage, PipelineStage.id == ApplicationStageHistory.stage_id)
         .join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id)
-        .filter(ApplicationStageHistory.created_at <= now)
+        .filter(
+            ApplicationStageHistory.created_at >= filters.start_dt,
+            ApplicationStageHistory.created_at <= filters.end_dt,
+            ApplicationStageHistory.created_at <= now,
+        )
         .order_by(ApplicationStageHistory.created_at.desc())
     )
     stage_q = _apply_job_filters(stage_q, filters)
@@ -1129,32 +1215,6 @@ def _activity_feed(db: Session, filters: _FilterContext, *, limit: int = 16) -> 
                 "title": f"Moved candidate to {stage.name}",
                 "description": f"{cand.first_name} {cand.last_name}".strip(),
                 "type": "stage.move",
-            }
-        )
-
-    interview_q = (
-        db.query(Interview, Candidate, User)
-        .join(CandidateApplication, CandidateApplication.id == Interview.application_id)
-        .join(Candidate, Candidate.id == CandidateApplication.candidate_id)
-        .join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id)
-        .outerjoin(User, User.id == JobRequirement.assigned_to)
-        .filter(
-            Interview.status == "completed",
-            Interview.scheduled_datetime.is_not(None),
-            Interview.scheduled_datetime <= now,
-        )
-        .order_by(Interview.scheduled_datetime.desc())
-    )
-    interview_q = _apply_job_filters(interview_q, filters)
-    for iv, cand, user in interview_q.limit(limit).all():
-        events.append(
-            {
-                "id": f"iv-{iv.id}",
-                "time": iv.scheduled_datetime.isoformat() if iv.scheduled_datetime else None,
-                "actor": f"{user.first_name} {user.last_name}".strip() if user else None,
-                "title": "Completed interview",
-                "description": f"{cand.first_name} {cand.last_name}".strip(),
-                "type": "interview.completed",
             }
         )
 
@@ -1276,54 +1336,14 @@ def _alerts(
             }
         )
 
-    waiting_feedback = int(
-        _apply_job_filters(
-            db.query(func.count(Interview.id))
-            .join(CandidateApplication, CandidateApplication.id == Interview.application_id)
-            .join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id)
-            .filter(
-                Interview.status == "completed",
-                or_(Interview.feedback.is_(None), Interview.feedback == ""),
-            ),
-            filters,
-        ).scalar()
-        or 0
-    )
-    if waiting_feedback:
-        alerts.append(
-            {
-                "id": "feedback-waiting",
-                "severity": "amber",
-                "title": "Candidates waiting for feedback",
-                "description": f"{waiting_feedback} completed interviews lack feedback.",
-                "count": waiting_feedback,
-                "action_label": "Add feedback",
-                "action_href": "/pipeline",
-            }
-        )
-
-    joining = int(
-        _apply_job_filters(
-            db.query(func.count(Offer.id))
-            .join(CandidateApplication, CandidateApplication.id == Offer.application_id)
-            .join(JobRequirement, JobRequirement.id == CandidateApplication.job_requirement_id)
-            .filter(
-                Offer.joining_date.is_not(None),
-                Offer.joining_date >= filters.today,
-                Offer.joining_date <= filters.today + timedelta(days=7),
-                Offer.status.in_(["pending", "accepted"]),
-            ),
-            filters,
-        ).scalar()
-        or 0
-    )
+    joining = _expected_joins_this_week(db, filters)
     if joining:
         alerts.append(
             {
                 "id": "upcoming-joins",
                 "severity": "amber",
-                "title": "Upcoming joining dates",
-                "description": f"{joining} candidates are joining within 7 days.",
+                "title": "Expected joins this week",
+                "description": f"{joining} offer-stage candidates have joining dates this week.",
                 "count": joining,
                 "action_label": "Review joins",
                 "action_href": "/pipeline",
