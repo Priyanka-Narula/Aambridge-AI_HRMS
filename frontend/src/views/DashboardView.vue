@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { fetchAnalyticsDashboard } from '@/api/dashboard'
 import BarChart from '@/components/dashboard/BarChart.vue'
 import OwnerCommandCenter from '@/components/dashboard/command/OwnerCommandCenter.vue'
+import RecruiterCommandCenter from '@/components/dashboard/recruiter/RecruiterCommandCenter.vue'
 import HrmsAlert from '@/components/ui/HrmsAlert.vue'
 import { useAttendanceStore } from '@/stores/attendance'
 import { useAuthStore } from '@/stores/auth'
@@ -177,11 +178,7 @@ function bumpCommandCenterRefresh() {
 
 function onSocketEvent(event: DashboardWsEvent) {
   if (event.type === 'connected') return
-  if (auth.role === 'owner' || isOwner.value) {
-    bumpCommandCenterRefresh()
-    return
-  }
-  void load(event.widgets)
+  bumpCommandCenterRefresh()
 }
 
 let unsubscribeLive: (() => void) | undefined
@@ -189,11 +186,7 @@ let unsubscribeLive: (() => void) | undefined
 watch(
   () => [auth.dateRange.start, auth.dateRange.end],
   () => {
-    if (auth.role === 'owner' || isOwner.value) {
-      bumpCommandCenterRefresh()
-      return
-    }
-    void load()
+    bumpCommandCenterRefresh()
   },
 )
 
@@ -202,11 +195,7 @@ let clockTimer: ReturnType<typeof setInterval>
 
 function onVisible() {
   if (document.visibilityState !== 'visible') return
-  if (auth.role === 'owner' || isOwner.value) {
-    bumpCommandCenterRefresh()
-    return
-  }
-  void load()
+  bumpCommandCenterRefresh()
 }
 
 onMounted(async () => {
@@ -216,7 +205,6 @@ onMounted(async () => {
   unsubscribeLive = live.subscribe(onSocketEvent)
   document.addEventListener('visibilitychange', onVisible)
   await Promise.all([
-    auth.role === 'owner' ? Promise.resolve() : load(),
     attendance.fetchMyToday(),
     attendance.fetchPolicy(),
     auth.role === 'owner' ? attendance.fetchAllToday() : Promise.resolve(),
@@ -349,123 +337,12 @@ const statusClass: Record<string, string> = {
       :refresh-key="recruiterPerformanceRefreshKey"
     />
 
-    <template v-else>
-      <section v-if="loading && !data" class="analytics__loading">Loading analytics…</section>
-      <section v-else-if="!data" class="analytics__loading">
-        {{ error || 'No analytics data available.' }}
-      </section>
-      <template v-else>
-        <section class="kpi-grid" :class="{ 'is-flash': flash.has('kpis') }">
-          <article v-for="card in cards" :key="card.label" class="kpi">
-            <div class="kpi__head">
-              <span class="kpi__label">{{ card.label }}</span>
-              <span class="kpi__icon">{{ kpiMeta[card.label]?.icon ?? '•' }}</span>
-            </div>
-            <strong class="kpi__value">{{ card.value }}</strong>
-            <span class="kpi__hint">{{ kpiMeta[card.label]?.hint ?? 'Live metric' }}</span>
-          </article>
-        </section>
-
-        <section class="chart-grid">
-          <article class="chart-card" :class="{ 'is-flash': flash.has('pipeline_stages') }">
-            <header class="chart-card__head"><h2>My candidates by stage</h2></header>
-            <BarChart compact :items="pipelineBars" color="#4f46e5" />
-          </article>
-          <article class="chart-card" :class="{ 'is-flash': flash.has('upcoming_interviews') }">
-            <header class="chart-card__head"><h2>My upcoming interviews</h2></header>
-            <ul class="list list--tight">
-              <li v-for="row in data.tables.upcoming_interviews.slice(0, 4)" :key="str(row.id)">
-                <div>
-                  <strong>{{ str(row.job_title) }}</strong>
-                  <span>{{ str(row.candidate_name) }}</span>
-                </div>
-                <em>{{ formatWhen(row.scheduled_at) }}</em>
-              </li>
-            </ul>
-          </article>
-          <article class="chart-card" :class="{ 'is-flash': flash.has('pending_tasks') }">
-            <header class="chart-card__head"><h2>My tasks</h2></header>
-            <ul class="list list--tight">
-              <li v-for="row in data.tables.pending_tasks.slice(0, 4)" :key="str(row.id)">
-                <div>
-                  <strong>{{ str(row.title) }}</strong>
-                  <span>{{ str(row.subtitle) }}</span>
-                </div>
-                <em>{{ formatWhen(row.created_at) }}</em>
-              </li>
-            </ul>
-          </article>
-          <article class="chart-card chart-card--wide" :class="{ 'is-flash': flash.has('recent_activities') }">
-            <header class="chart-card__head"><h2>Recent activity</h2></header>
-            <ul class="list list--tight">
-              <li v-for="row in data.tables.recent_activities.slice(0, 5)" :key="str(row.id)">
-                <div>
-                  <strong>{{ str(row.title) }}</strong>
-                  <span>{{ str(row.description) }}</span>
-                </div>
-                <em>{{ formatWhen(row.created_at) }}</em>
-              </li>
-            </ul>
-          </article>
-        </section>
-
-        <section class="table-grid">
-          <article class="panel" :class="{ 'is-flash': flash.has('recent_placements') }">
-            <header class="panel__head"><h2>Recent placements</h2><span>View all</span></header>
-            <div v-if="!data.tables.recent_placements.length" class="empty">No placements yet</div>
-            <ul v-else class="list">
-              <li v-for="row in data.tables.recent_placements" :key="str(row.id)">
-                <div>
-                  <strong>{{ str(row.candidate_name) }}</strong>
-                  <span>{{ str(row.client_name) }} · {{ str(row.job_title) }}</span>
-                </div>
-                <em>{{ formatWhen(row.joined_date) }}</em>
-              </li>
-            </ul>
-          </article>
-
-          <article class="panel" :class="{ 'is-flash': flash.has('recent_candidates') }">
-            <header class="panel__head"><h2>Recently uploaded</h2><span>Latest</span></header>
-            <ul class="list">
-              <li v-for="row in data.tables.recent_candidates" :key="str(row.id)">
-                <div>
-                  <strong>{{ str(row.name) }}</strong>
-                  <span>{{ str(row.email) }}</span>
-                </div>
-                <em>{{ str(row.status) }}</em>
-              </li>
-            </ul>
-          </article>
-
-          <article class="panel" :class="{ 'is-flash': flash.has('todays_interviews') }">
-            <header class="panel__head"><h2>Today's interviews</h2><span>Schedule</span></header>
-            <div v-if="!data.tables.todays_interviews.length" class="empty">No interviews today</div>
-            <ul v-else class="list">
-              <li v-for="row in data.tables.todays_interviews" :key="str(row.id)">
-                <div>
-                  <strong>{{ str(row.candidate_name) }}</strong>
-                  <span>{{ str(row.job_title) }}</span>
-                </div>
-                <em>{{ formatWhen(row.scheduled_at) }}</em>
-              </li>
-            </ul>
-          </article>
-
-          <article class="panel" :class="{ 'is-flash': flash.has('recent_feedback') }">
-            <header class="panel__head"><h2>Recent feedback</h2></header>
-            <div v-if="!data.tables.recent_feedback.length" class="empty">No feedback yet</div>
-            <ul v-else class="list">
-              <li v-for="row in data.tables.recent_feedback" :key="str(row.id)">
-                <div>
-                  <strong>{{ str(row.candidate_name) }}</strong>
-                  <span>{{ str(row.feedback) }}</span>
-                </div>
-              </li>
-            </ul>
-          </article>
-        </section>
-      </template>
-    </template>
+    <RecruiterCommandCenter
+      v-else
+      :start="auth.dateRange.start || undefined"
+      :end="auth.dateRange.end || undefined"
+      :refresh-key="recruiterPerformanceRefreshKey"
+    />
   </div>
 </template>
 

@@ -1,3 +1,11 @@
+import type {
+  BusinessTrend,
+  ExecutiveKpi,
+  HiringFunnel,
+  OpenJobRow,
+  RecruiterLeaderboardRow,
+} from '@/types/commandCenter'
+
 export type DashboardRole = 'owner' | 'recruiter'
 
 export interface NamedCount {
@@ -143,4 +151,40 @@ export type RecruiterPerformancePeriod = 'monthly' | 'till_date'
 export interface RecruiterPerformanceResponse {
   recruiters: RecruiterMetrics[]
   industries: string[]
+}
+
+export interface RecruiterFocusItem {
+  key: string
+  label: string
+  value: number
+  tone: 'neutral' | 'attention' | 'urgent' | 'positive'
+  action_href: string
+}
+
+export interface RecruiterActionItem {
+  key: string
+  priority: 'high' | 'medium' | 'low'
+  title: string
+  description: string
+  count: number
+  action_label: string
+  action_href: string
+}
+
+export interface RecruiterStanding {
+  rank: number | null
+  total_recruiters: number
+  team_median_score: number
+  me: RecruiterLeaderboardRow | null
+  peers: RecruiterLeaderboardRow[]
+}
+
+export interface RecruiterCommandData {
+  today_focus: RecruiterFocusItem[]
+  kpis: ExecutiveKpi[]
+  standing: RecruiterStanding
+  hiring_funnel: HiringFunnel
+  action_queue: RecruiterActionItem[]
+  job_health: OpenJobRow[]
+  personal_trend: BusinessTrend
 }

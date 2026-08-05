@@ -7,8 +7,8 @@ The application has two dashboard experiences:
 
 1. **Owner Executive Command Center** — the dashboard shown to owners in the
    current UI. It uses `GET /api/v1/dashboard/command-center`.
-2. **Recruiter dashboard** — the dashboard shown to recruiters. It uses
-   `GET /api/v1/dashboard/analytics`.
+2. **Recruiter performance cockpit** — the dashboard shown to recruiters. It
+   uses `GET /api/v1/dashboard/recruiter-command`.
 
 `GET /api/v1/dashboard/analytics` still has an owner-shaped response for
 backward compatibility, but the owner UI does not render it. Owners use the
@@ -18,7 +18,7 @@ Command Center instead.
 
 | Concern | Owner Command Center | Recruiter dashboard |
 | --- | --- | --- |
-| API | `GET /api/v1/dashboard/command-center` | `GET /api/v1/dashboard/analytics` |
+| API | `GET /api/v1/dashboard/command-center` | `GET /api/v1/dashboard/recruiter-command` |
 | Access | Owner role only | Owner or recruiter; UI uses it for recruiters |
 | Default requested range | Last 30 calendar days through today | Last 30 calendar days through today |
 | Default date source | Office date in `OFFICE_TIMEZONE` (default `Asia/Dubai`) | Browser-supplied dates; service uses server `date.today()` for most “today” values |
@@ -76,13 +76,14 @@ assigned workload, and the current funnel.
 
 ### Recruiter dashboard time model
 
-The legacy analytics service accepts `start`/`end`, but only the activity
-heatmap uses them. Most recruiter KPIs, charts, and lists are current-state,
-calendar-month, or fixed-period values.
+The recruiter cockpit uses the same office-timezone date boundaries and
+selected/prior-period comparisons as the Command Center. Current-state measures
+such as the funnel, pending actions, and open jobs intentionally ignore the
+historical range. Its trend always shows six calendar months.
 
-For timestamp-based legacy helper queries, the service uses UTC day boundaries.
-“Today” and six-month windows use the backend server’s `date.today()`.
-This is different from the Command Center’s office-timezone behavior.
+The legacy `/analytics` recruiter response still uses UTC/server-calendar
+semantics and remains available for integrations; the current recruiter UI
+does not request it.
 
 ### Command Center filters
 
@@ -303,6 +304,28 @@ Recruiters are restricted to jobs where `job_requirements.assigned_to` is their
 user ID. Candidate ownership uses `created_by` matching their user ID, email,
 or full name. Submission ownership uses `submitted_by = current_user.id`.
 
+The current recruiter UI is an action-oriented performance cockpit. Competition
+metrics use the same job-assignee attribution and productivity formula as the
+owner Command Center, ensuring that a recruiter sees the same score and rank
+that the owner sees. Submission quality and pending owner-review actions use
+`submitted_by`, because those measure the recruiter's own submissions.
+
+The cockpit includes:
+
+- today's interviews, pending reviews/offers, expected joins, and stale
+  pipeline candidates;
+- period KPIs for placements, conversion, offer acceptance, time to hire,
+  submission quality, active pipeline, and open assigned jobs;
+- personal rank and score versus the team median, plus a compact leaderboard;
+- recruiter-scoped hiring funnel and highest drop-off insight;
+- prioritized feedback, stale-candidate, aging-offer, review, job-risk, and
+  joining actions;
+- recruiter-scoped at-risk jobs and a six-month activity trend.
+
+Raw uploads, attendance, and assigned-job volume do not contribute directly to
+rank. The endpoint uses live database aggregates and does not read the
+`recruiter_metrics` table.
+
 ### Recruiter KPI cards
 
 | Card | Computation |
@@ -348,8 +371,8 @@ clients:
 | Today’s interviews | Any interview scheduled during current UTC day on assigned jobs; first 10 |
 | Recent feedback | Most recent non-empty interview feedback on assigned jobs, ordered by scheduled timestamp; first 6 |
 
-The recruiter dashboard does not render a generic owner analytics view. Its
-owner-compatible fields are returned only to preserve a shared response shape.
+These legacy lists remain available from `/analytics`, but the current
+recruiter cockpit no longer renders that generic shared response.
 
 ## Legacy owner analytics and recruiter-performance API
 

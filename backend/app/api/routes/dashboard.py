@@ -13,11 +13,12 @@ from app.api.schemas.dashboard import (
     RecruiterPerformanceResponse,
     DashboardStatsResponse,
 )
+from app.api.schemas.recruiter_command import RecruiterCommandResponse
 from app.core.database import SessionLocal, get_db
 from app.core.deps import get_current_user
 from app.core.security import ROLE_OWNER, decode_access_token, normalize_role
 from app.models.user_access import User
-from app.services import command_center_service, dashboard_service
+from app.services import command_center_service, dashboard_service, recruiter_command_service
 from app.services.dashboard_events import dashboard_hub
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -80,6 +81,21 @@ def command_center(
         job_status=job_status,
         location=location,
         activity_limit=activity_limit,
+    )
+
+
+@router.get("/recruiter-command", response_model=RecruiterCommandResponse)
+def recruiter_command(
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return recruiter_command_service.get_recruiter_command(
+        db,
+        current_user,
+        start=start,
+        end=end,
     )
 
 
