@@ -80,9 +80,9 @@ If it still hangs, open **Task Manager** and end any stuck `com.docker.*` or `do
 ### MinIO upload/download issues
 
 - Confirm MinIO is running: `docker compose ps`
-- Check MinIO health: `http://127.0.0.1:9000/minio/health/live` should return `200`
+- Check MinIO health: `http://127.0.0.1:9009/minio/health/live` should return `200`
 - Check API health: `http://127.0.0.1:8000/health/storage`
-- Confirm `MINIO_ENDPOINT` in `backend/.env` is `127.0.0.1:9000` (matches `docker-compose.yml` port `9000:9000`)
+- Confirm `MINIO_ENDPOINT` in `backend/.env` is `127.0.0.1:9009` (matches `docker-compose.yml` port `9009:9000`; prefer `127.0.0.1` over `localhost` on Windows to avoid IPv6 delays)
 - If `minio-init` exited with an error, recreate the stack:
 
 ```powershell

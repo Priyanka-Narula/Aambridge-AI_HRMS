@@ -87,7 +87,7 @@ Local URLs:
 - Frontend: `http://localhost:5173`
 - Backend API: `http://127.0.0.1:8000`
 - API Docs (Swagger): `http://127.0.0.1:8000/docs`
-- MinIO Console: `http://localhost:9001` (login: `hrms` / `hrms_minio_secret`) — API on port `9000`
+- MinIO Console: `http://localhost:9001` (login: `hrms` / `hrms_minio_secret`) — API on port `9009`
 
 When done:
 
@@ -141,7 +141,7 @@ Set these in `backend/.env` (never commit `.env`).
   - `DATABASE_URL` (default: `postgresql://hrms:hrms@localhost:5433/hrms`)
   - `DB_ECHO` (default: `false`)
 - **MinIO / CV storage**
-  - `MINIO_ENDPOINT` (default: `localhost:9000`)
+  - `MINIO_ENDPOINT` (default: `127.0.0.1:9009`)
   - `MINIO_ACCESS_KEY` (default: `hrms`)
   - `MINIO_SECRET_KEY` (default: `hrms_minio_secret`)
   - `MINIO_BUCKET` (default: `hrms-cvs`)

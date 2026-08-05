@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://hrms:hrms@localhost:5433/hrms"
     DB_ECHO: bool = False
 
-    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ENDPOINT: str = "127.0.0.1:9009"
     MINIO_ACCESS_KEY: str = "hrms"
     MINIO_SECRET_KEY: str = "hrms_minio_secret"
     MINIO_BUCKET: str = "hrms-cvs"
