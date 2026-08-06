@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useDashboardLiveStore } from '@/stores/dashboardLive'
 import type { AnalyticsDashboard, DashboardWsEvent } from '@/types/dashboard'
 import { formatOfficeTime, formatUaeClock, formatUaeTime, OFFICE_TIMEZONE } from '@/utils/format'
+import { formatOfficeTime, formatUaetime, OFFICE_TIMEZONE, uaeHour } from '@/utils/format'
 
 const auth = useAuthStore()
 const attendance = useAttendanceStore()
@@ -23,8 +24,11 @@ const recruiterPerformanceRefreshKey = ref(0)
 
 const isOwner = computed(() => data.value?.role === 'owner' || auth.role === 'owner')
 
+const now = ref(new Date())
+const officeTz = computed(() => attendance.policy?.timezone || OFFICE_TIMEZONE)
+
 const greeting = computed(() => {
-  const hour = new Date().getHours()
+  const hour = uaeHour(now.value, officeTz.value)
   if (hour < 12) return 'Good morning'
   if (hour < 17) return 'Good afternoon'
   return 'Good evening'
@@ -57,6 +61,8 @@ const heroSubtitle = computed(() =>
     ? 'Understand business health, recruiter load, and what needs action today.'
     : "Here's your personal hiring snapshot for today.",
 )
+// ── Live clock (always UAE / Dubai) ───────────────────────────────────────────
+let clockTimer: ReturnType<typeof setInterval>
 
 const kpiMeta: Record<string, { icon: string; hint: string }> = {
   'Total Candidates': { icon: '◉', hint: 'Overall talent pool' },
@@ -188,6 +194,8 @@ watch(
   () => {
     bumpCommandCenterRefresh()
   },
+const currentTime = computed(() =>
+  formatUaetime(now.value, { hour: '2-digit', minute: '2-digit', second: '2-digit' }, officeTz.value),
 )
 
 const now = ref(new Date())
@@ -234,6 +242,10 @@ const teamAttendanceStats = computed(() => {
 })
 
 const teamAttendancePreview = computed(() => attendance.allRecords.slice(0, 8))
+function formatTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  return formatUaetime(iso, { hour: '2-digit', minute: '2-digit' }, officeTz.value)
+}
 
 async function handleCheckIn() {
   await attendance.checkIn()

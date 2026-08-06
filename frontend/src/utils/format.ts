@@ -1,6 +1,7 @@
 export const EMPTY = '-'
 export const ELLIPSIS = '...'
 const INR = '\u20B9'
+export const OFFICE_TIMEZONE = 'Asia/Dubai'
 
 export function orEmpty(value: string | null | undefined): string {
   if (value == null || String(value).trim() === '') return EMPTY
