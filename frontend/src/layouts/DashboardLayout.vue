@@ -1,13 +1,61 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
+import DashboardSocket from '@/components/dashboard/DashboardSocket.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppTopBar from '@/components/layout/AppTopBar.vue'
+import { useDashboardLiveStore } from '@/stores/dashboardLive'
+import { useNotificationsStore } from '@/stores/notifications'
+
+const SIDEBAR_COLLAPSED_KEY = 'hrms.sidebarCollapsed'
 
 const sidebarOpen = ref(false)
+const sidebarCollapsed = ref(false)
+const live = useDashboardLiveStore()
+const notifications = useNotificationsStore()
+
+let unsubscribeLive: (() => void) | undefined
+
+onMounted(() => {
+  try {
+    sidebarCollapsed.value = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+  } catch {
+    sidebarCollapsed.value = false
+  }
+
+  unsubscribeLive = live.subscribe((event) => {
+    if (event.type === 'connected') return
+    notifications.ingestEvent(event)
+    notifications.refreshIfNeeded(event.widgets)
+  })
+})
+
+onUnmounted(() => {
+  unsubscribeLive?.()
+})
+
+watch(sidebarCollapsed, (collapsed) => {
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')
+  } catch {
+    /* ignore quota / private mode */
+  }
+})
+
+function isDesktop() {
+  return typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+}
 
 function toggleSidebar() {
+  if (isDesktop()) {
+    sidebarCollapsed.value = !sidebarCollapsed.value
+    return
+  }
   sidebarOpen.value = !sidebarOpen.value
+}
+
+function toggleCollapse() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
 }
 
 function closeSidebar() {
@@ -16,11 +64,23 @@ function closeSidebar() {
 </script>
 
 <template>
-  <div class="dashboard-layout">
-    <AppSidebar :open="sidebarOpen" @close="closeSidebar" />
+  <div
+    class="dashboard-layout"
+    :class="{ 'dashboard-layout--sidebar-collapsed': sidebarCollapsed }"
+  >
+    <AppSidebar
+      :open="sidebarOpen"
+      :collapsed="sidebarCollapsed"
+      @close="closeSidebar"
+      @toggle-collapse="toggleCollapse"
+    />
 
     <div class="dashboard-layout__main">
-      <AppTopBar @toggle-sidebar="toggleSidebar" />
+      <DashboardSocket class="dashboard-layout__socket" />
+      <AppTopBar
+        :sidebar-collapsed="sidebarCollapsed"
+        @toggle-sidebar="toggleSidebar"
+      />
 
       <main class="dashboard-layout__content">
         <RouterView />
@@ -44,6 +104,7 @@ function closeSidebar() {
   flex-direction: column;
   min-width: 0;
   min-height: 100vh;
+  transition: margin-left var(--hrms-transition);
 }
 
 .dashboard-layout__content {
@@ -60,9 +121,22 @@ function closeSidebar() {
   overflow: hidden;
 }
 
+.dashboard-layout__socket {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 @media (min-width: 1024px) {
   .dashboard-layout__main {
     margin-left: var(--hrms-sidebar-width);
+  }
+
+  .dashboard-layout--sidebar-collapsed .dashboard-layout__main {
+    margin-left: var(--hrms-sidebar-collapsed-width);
   }
 }
 </style>

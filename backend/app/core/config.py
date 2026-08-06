@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://hrms:hrms@localhost:5433/hrms"
     DB_ECHO: bool = False
 
-    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ENDPOINT: str = "127.0.0.1:9009"
     MINIO_ACCESS_KEY: str = "hrms"
     MINIO_SECRET_KEY: str = "hrms_minio_secret"
     MINIO_BUCKET: str = "hrms-cvs"
@@ -19,12 +19,11 @@ class Settings(BaseSettings):
     GOOGLE_DRIVE_SYNC_DIR: str | None = None
 
     HF_API_TOKEN: str | None = None
-    # Default to a currently available Inference Providers chat model.
-    # meta-llama/Meta-Llama-3-8B-Instruct is no longer supported for many accounts.
-    HF_MODEL: str = "mistralai/Mistral-7B-Instruct-v0.3"
+    # Prefer Inference Providers chat models that accept chat_completion.
+    HF_MODEL: str = "meta-llama/Llama-3.1-8B-Instruct"
     HF_MODEL_FALLBACKS: str = (
-        "mistralai/Mistral-Nemo-Instruct-2407,"
-        "HuggingFaceH4/zephyr-7b-beta,"
+        "Qwen/Qwen2.5-Coder-7B-Instruct,"
+        "meta-llama/Meta-Llama-3-8B-Instruct,"
         "Qwen/Qwen2.5-7B-Instruct"
     )
     HF_PROVIDER: str = "auto"
@@ -44,6 +43,15 @@ class Settings(BaseSettings):
     CHECKIN_EXPECTED: str = "09:00"
     CHECKOUT_EXPECTED: str = "18:30"
     LATE_THRESHOLD: str = "09:15"
+
+    # Outbound email (owner → client profile sharing). Leave SMTP_HOST empty to disable.
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_FROM: str | None = None
+    SMTP_USE_TLS: bool = True
+    COMPANY_NAME: str = "Aambridge"
 
 
 settings = Settings()

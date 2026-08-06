@@ -27,7 +27,7 @@ Write-Host "`n5) MinIO init logs:" -ForegroundColor Yellow
 docker logs hrms-minio-init 2>&1 | Select-Object -Last 15
 
 Write-Host "`nDone. Verify:" -ForegroundColor Green
-Write-Host "  MinIO health: http://127.0.0.1:9000/minio/health/live"
+Write-Host "  MinIO health: http://127.0.0.1:9009/minio/health/live"
 Write-Host "  API storage:  http://127.0.0.1:8000/health/storage"
 Write-Host ""
 Write-Host "If docker commands still hang, restart Docker Desktop:" -ForegroundColor Magenta

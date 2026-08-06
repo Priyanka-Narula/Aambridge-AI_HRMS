@@ -4,13 +4,20 @@ import * as authApi from '@/api/auth'
 import { getStoredToken } from '@/api/token'
 import type { AuthUser, DateRange, UserRole } from '@/types/auth'
 
+function formatLocalDate(value: Date): string {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function defaultDateRange(): DateRange {
   const end = new Date()
   const start = new Date()
   start.setDate(start.getDate() - 30)
   return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
+    start: formatLocalDate(start),
+    end: formatLocalDate(end),
   }
 }
 

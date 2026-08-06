@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -50,12 +50,15 @@ class CandidateApplication(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     submitted_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime(timezone=True), nullable=True, index=True
     )
     owner_status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="pending_review"
+        String(50), nullable=False, default="pending_review", index=True
     )
     submission_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    in_pipeline: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false", index=True
+    )
 
     current_stage_rel: Mapped["PipelineStage | None"] = relationship(
         back_populates="applications"
@@ -109,9 +112,11 @@ class Interview(Base):
     )
     interview_round: Mapped[int] = mapped_column(Integer, nullable=False)
     interviewer_name: Mapped[str | None] = mapped_column(String(255))
-    scheduled_datetime: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    scheduled_datetime: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
     mode: Mapped[str | None] = mapped_column(String(50))
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="scheduled")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="scheduled", index=True)
     feedback: Mapped[str | None] = mapped_column(Text)
 
     application: Mapped["CandidateApplication"] = relationship(back_populates="interviews")

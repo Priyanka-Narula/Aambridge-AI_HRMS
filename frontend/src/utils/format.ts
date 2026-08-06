@@ -18,38 +18,39 @@ export function initials(first: string, last: string): string {
   return `${first[0] ?? ''}${last[0] ?? ''}`.toUpperCase()
 }
 
-/** Format a wall-clock HH:MM string (office schedule) for display. */
+/** Fixed office timezone for attendance (UAE). */
+export const OFFICE_TIMEZONE = 'Asia/Dubai'
+
 export function formatOfficeTime(hhmm: string): string {
+  // Policy times are already UAE wall-clock (e.g. "09:15") — format as-is.
   const [hours = 0, minutes = 0] = hhmm.split(':').map((part) => Number(part))
-  const date = new Date(Date.UTC(2020, 0, 1, hours, minutes, 0))
-  return date.toLocaleTimeString('en-AE', {
-    hour: 'numeric',
+  const ampm = hours >= 12 ? 'PM' : 'AM'
+  const h12 = hours % 12 || 12
+  return `${h12}:${String(minutes).padStart(2, '0')} ${ampm}`
+}
+
+export function formatUaeTime(
+  iso: string | Date | null | undefined,
+  opts: Intl.DateTimeFormatOptions = {
+    hour: '2-digit',
     minute: '2-digit',
     hour12: true,
-    timeZone: 'UTC',
-  })
-}
-
-/** Format an absolute timestamp in UAE (Dubai) office time. */
-export function formatUaetime(
-  iso: string | Date | null | undefined,
-  options: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' },
-  timeZone: string = OFFICE_TIMEZONE,
+  },
 ): string {
-  if (!iso) return EMPTY
-  const date = iso instanceof Date ? iso : new Date(iso)
-  if (Number.isNaN(date.getTime())) return EMPTY
-  return date.toLocaleTimeString('en-AE', { ...options, timeZone })
+  if (!iso) return '—'
+  const d = typeof iso === 'string' ? new Date(iso) : iso
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleTimeString('en-AE', { ...opts, timeZone: OFFICE_TIMEZONE })
 }
 
-/** Current UAE office-local hour (0–23). */
-export function uaeHour(date: Date = new Date(), timeZone: string = OFFICE_TIMEZONE): number {
-  const hour = new Intl.DateTimeFormat('en-GB', {
-    hour: 'numeric',
-    hour12: false,
-    timeZone,
-  }).format(date)
-  return Number(hour)
+export function formatUaeClock(date: Date = new Date()): string {
+  return date.toLocaleTimeString('en-AE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+    timeZone: OFFICE_TIMEZONE,
+  })
 }
 
 export function avatarHue(seed: string): number {

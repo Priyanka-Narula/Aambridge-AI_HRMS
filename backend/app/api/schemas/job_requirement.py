@@ -71,3 +71,8 @@ class JobRequirementListItem(BaseModel):
     created_by: uuid.UUID
     created_at: datetime | None = None
     client_submission_format: list[dict[str, Any]] | None = None
+    submitted_candidates: int = 0
+    pipeline_candidates: int = 0
+    joined_candidates: int = 0
+    remaining_positions: int | None = None
+    submissions_enabled: bool = True

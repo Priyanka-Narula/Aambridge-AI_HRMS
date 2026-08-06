@@ -11,6 +11,11 @@ import {
   downloadSubmission,
   fetchOwnerDashboard,
 } from '@/api/submissions'
+import {
+  fetchEmailStatus,
+  shareApprovedProfiles,
+  shortlistApplications,
+} from '@/api/pipeline'
 import ResumePreview from '@/components/candidates/ResumePreview.vue'
 import HrmsAlert from '@/components/ui/HrmsAlert.vue'
 import HrmsModal from '@/components/ui/HrmsModal.vue'
@@ -30,7 +35,7 @@ import {
 } from '@/utils/format'
 
 type StatusFilter = 'all' | OwnerStatusType
-type DetailTab = 'overview' | 'experience' | 'education' | 'submission'
+type DetailTab = 'job' | 'overview' | 'experience' | 'education' | 'submission'
 
 const dashboard = ref<OwnerDashboardClient[]>([])
 const selected = ref<OwnerDashboardClient | null>(null)
@@ -52,6 +57,12 @@ const showResumePreview = ref(false)
 const previewResumeUrl = ref<string | null>(null)
 const previewResumeLoading = ref(false)
 const previewResumeError = ref<string | null>(null)
+const sharingEmail = ref(false)
+const shortlisting = ref(false)
+const emailConfigured = ref(false)
+const showShareModal = ref(false)
+const shareEmails = ref('')
+const shareMessage = ref('')
 
 function revokePreviewResumeUrl() {
   if (previewResumeUrl.value) {
@@ -118,7 +129,12 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    dashboard.value = await fetchOwnerDashboard()
+    const [dash, mail] = await Promise.all([
+      fetchOwnerDashboard(),
+      fetchEmailStatus().catch(() => ({ configured: false })),
+    ])
+    dashboard.value = dash
+    emailConfigured.value = mail.configured
     if (selected.value) {
       const refreshed = dashboard.value.find((c) => c.client_id === selected.value!.client_id)
       selected.value = refreshed ?? null
@@ -194,12 +210,21 @@ function closePanel() {
 function closeCandidateDetail() {
   viewingSubmission.value = null
   candidateDetail.value = null
-  detailTab.value = 'overview'
+  detailTab.value = 'job'
 }
 
 const selectedJob = computed<OwnerDashboardJob | null>(() => {
   if (!selected.value || !selectedJobId.value) return null
   return selected.value.jobs.find((j) => j.job_requirement_id === selectedJobId.value) ?? null
+})
+
+const viewingJob = computed<OwnerDashboardJob | null>(() => {
+  if (!selected.value || !viewingSubmission.value) return selectedJob.value
+  return (
+    selected.value.jobs.find(
+      (j) => j.job_requirement_id === viewingSubmission.value!.job_requirement_id,
+    ) ?? selectedJob.value
+  )
 })
 
 const filteredSubmissions = computed(() => {
@@ -216,8 +241,9 @@ const submissionDataEntries = computed(() => {
 
 async function openCandidate(sub: CandidateSubmission) {
   viewingSubmission.value = sub
+  selectedJobId.value = sub.job_requirement_id
   candidateDetail.value = null
-  detailTab.value = 'overview'
+  detailTab.value = 'job'
   loadingCandidate.value = true
   error.value = ''
   try {
@@ -308,6 +334,66 @@ async function handleDownloadApprovedClient() {
   }
 }
 
+function openShareModal() {
+  shareEmails.value = ''
+  shareMessage.value = ''
+  showShareModal.value = true
+}
+
+async function handleShareApproved() {
+  if (!selected.value) return
+  sharingEmail.value = true
+  error.value = ''
+  try {
+    const emails = shareEmails.value
+      .split(/[,;\s]+/)
+      .map((e) => e.trim())
+      .filter(Boolean)
+    const result = await shareApprovedProfiles(selected.value.client_id, {
+      to_emails: emails.length ? emails : undefined,
+      message: shareMessage.value.trim() || undefined,
+    })
+    success.value = `Shared ${result.candidate_count} profile(s) to ${result.sent_to.join(', ')}`
+    showShareModal.value = false
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to share by email'
+  } finally {
+    sharingEmail.value = false
+  }
+}
+
+async function handleAddToPipeline(sub?: CandidateSubmission) {
+  if (!selected.value) return
+  const targets = sub
+    ? [sub]
+    : selected.value.jobs.flatMap((j) => j.submissions).filter((s) => s.owner_status === 'approved')
+  if (!targets.length) {
+    error.value = 'No approved candidates to add to pipeline'
+    return
+  }
+  shortlisting.value = true
+  error.value = ''
+  try {
+    await shortlistApplications(
+      targets.map((t) => t.id),
+      'Added to hiring pipeline (Applied)',
+    )
+    success.value =
+      targets.length === 1
+        ? `${targets[0]!.candidate_name} added to pipeline (Applied)`
+        : `${targets.length} candidates added to pipeline (Applied)`
+    await load()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to add to pipeline'
+  } finally {
+    shortlisting.value = false
+  }
+}
+
+function isInPipeline(sub: CandidateSubmission) {
+  return sub.owner_status === 'approved' && !!sub.in_pipeline
+}
+
 async function handleDownloadResume() {
   if (!candidateDetail.value?.resume_url) return
   downloadingResume.value = true
@@ -346,6 +432,31 @@ const formatDate = (d: string | null | undefined) =>
 const formatExpDate = (d: string | null | undefined) => {
   if (!d) return 'Present'
   return new Date(d).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+}
+
+const formatEnum = (value: string | null | undefined) => {
+  if (!value) return EMPTY
+  return value.replace(/_/g, ' ')
+}
+
+const experienceLabel = (job: OwnerDashboardJob | null | undefined) => {
+  if (!job) return EMPTY
+  if (job.experience_min == null && job.experience_max == null) return EMPTY
+  if (job.experience_min != null && job.experience_max != null) {
+    return `${job.experience_min}–${job.experience_max} yrs`
+  }
+  if (job.experience_min != null) return `${job.experience_min}+ yrs`
+  return `Up to ${job.experience_max} yrs`
+}
+
+const salaryRangeLabel = (job: OwnerDashboardJob | null | undefined) => {
+  if (!job) return EMPTY
+  if (job.salary_min == null && job.salary_max == null) return EMPTY
+  if (job.salary_min != null && job.salary_max != null) {
+    return `${formatInr(job.salary_min)} – ${formatInr(job.salary_max)}`
+  }
+  if (job.salary_min != null) return `From ${formatInr(job.salary_min)}`
+  return `Up to ${formatInr(job.salary_max)}`
 }
 </script>
 
@@ -441,10 +552,8 @@ const formatExpDate = (d: string | null | undefined) => {
                     {{ candidateDetail.first_name }} {{ candidateDetail.last_name }}
                   </h2>
                   <p class="hrms-panel-role">
-                    {{ candidateDetail.current_designation ?? 'No designation' }}
-                    <span v-if="candidateDetail.current_company">
-                      · {{ candidateDetail.current_company }}
-                    </span>
+                    {{ viewingSubmission.job_title }}
+                    <span> · {{ viewingSubmission.client_name }}</span>
                   </p>
                   <div class="submissions-badges">
                     <span
@@ -492,6 +601,22 @@ const formatExpDate = (d: string | null | undefined) => {
                   {{ actioning === `dl-${viewingSubmission.id}` ? 'Downloading…' : 'Download Excel' }}
                 </button>
                 <button
+                  v-if="viewingSubmission.owner_status === 'approved' && !isInPipeline(viewingSubmission)"
+                  type="button"
+                  class="hrms-btn hrms-btn--sm hrms-btn--success"
+                  :disabled="shortlisting"
+                  @click="handleAddToPipeline(viewingSubmission)"
+                >
+                  {{ shortlisting ? 'Adding…' : 'Add to Pipeline' }}
+                </button>
+                <RouterLink
+                  v-if="viewingSubmission.owner_status === 'approved' && isInPipeline(viewingSubmission)"
+                  class="hrms-btn hrms-btn--sm"
+                  to="/pipeline"
+                >
+                  View in Pipeline
+                </RouterLink>
+                <button
                   v-if="candidateDetail.resume_url"
                   type="button"
                   class="hrms-btn hrms-btn--sm"
@@ -517,10 +642,18 @@ const formatExpDate = (d: string | null | undefined) => {
                 <button
                   type="button"
                   class="hrms-tab"
+                  :class="{ 'hrms-tab--active': detailTab === 'job' }"
+                  @click="detailTab = 'job'"
+                >
+                  Job Requirement
+                </button>
+                <button
+                  type="button"
+                  class="hrms-tab"
                   :class="{ 'hrms-tab--active': detailTab === 'overview' }"
                   @click="detailTab = 'overview'"
                 >
-                  Overview
+                  Candidate
                 </button>
                 <button
                   type="button"
@@ -552,7 +685,118 @@ const formatExpDate = (d: string | null | undefined) => {
           </div>
 
           <div v-if="candidateDetail && !loadingCandidate" class="hrms-panel-body hrms-scroll">
-            <template v-if="detailTab === 'overview'">
+            <template v-if="detailTab === 'job'">
+              <section class="hrms-section">
+                <div class="submissions-job-meta">
+                  <h3 class="hrms-section-title" style="margin: 0">
+                    {{ viewingJob?.job_title ?? viewingSubmission.job_title }}
+                  </h3>
+                  <span
+                    v-if="viewingJob"
+                    class="hrms-status-badge"
+                    :style="`--sc: ${jobStatusColor(viewingJob.status)}`"
+                  >
+                    {{ formatEnum(viewingJob.status) }}
+                  </span>
+                </div>
+                <p class="hrms-panel-role" style="margin-top: 6px">
+                  {{ viewingSubmission.client_name }}
+                  <span v-if="viewingJob?.location"> · {{ viewingJob.location }}</span>
+                </p>
+              </section>
+
+              <section class="hrms-section">
+                <h3 class="hrms-section-title">Requirement details</h3>
+                <div class="hrms-info-grid">
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Assigned recruiter</span>
+                    <span class="hrms-info-value">
+                      {{ viewingJob?.assigned_recruiter_name ?? EMPTY }}
+                    </span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Department</span>
+                    <span class="hrms-info-value">{{ viewingJob?.department ?? EMPTY }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Location</span>
+                    <span class="hrms-info-value">{{ viewingJob?.location ?? EMPTY }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Employment type</span>
+                    <span class="hrms-info-value">{{ formatEnum(viewingJob?.employment_type) }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Work mode</span>
+                    <span class="hrms-info-value">{{ formatEnum(viewingJob?.work_mode) }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Experience</span>
+                    <span class="hrms-info-value">{{ experienceLabel(viewingJob) }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Salary range</span>
+                    <span class="hrms-info-value">{{ salaryRangeLabel(viewingJob) }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Open positions</span>
+                    <span class="hrms-info-value">
+                      {{ viewingJob?.open_positions != null ? viewingJob.open_positions : EMPTY }}
+                    </span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Priority</span>
+                    <span class="hrms-info-value">{{ formatEnum(viewingJob?.priority) }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Requirement type</span>
+                    <span class="hrms-info-value">{{ formatEnum(viewingJob?.requirement_type) }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Created</span>
+                    <span class="hrms-info-value">{{ formatDate(viewingJob?.created_at) }}</span>
+                  </div>
+                </div>
+              </section>
+
+              <section v-if="viewingJob?.job_description" class="hrms-section">
+                <h3 class="hrms-section-title">Job description</h3>
+                <p class="hrms-info-value submissions-job-description">
+                  {{ viewingJob.job_description }}
+                </p>
+              </section>
+
+              <section class="hrms-section">
+                <h3 class="hrms-section-title">This submission</h3>
+                <div class="hrms-info-grid">
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Candidate</span>
+                    <span class="hrms-info-value">{{ viewingSubmission.candidate_name }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Submitted by</span>
+                    <span class="hrms-info-value">
+                      {{ viewingSubmission.submitted_by_name ?? EMPTY }}
+                    </span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Submitted on</span>
+                    <span class="hrms-info-value">{{ formatDate(viewingSubmission.submitted_at) }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Review status</span>
+                    <span
+                      class="hrms-status-badge"
+                      :style="`--sc: ${ownerStatusColor(viewingSubmission.owner_status)}`"
+                    >
+                      {{ ownerStatusLabel(viewingSubmission.owner_status) }}
+                    </span>
+                  </div>
+                </div>
+              </section>
+            </template>
+
+            <template v-else-if="detailTab === 'overview'">
               <section class="hrms-section">
                 <h3 class="hrms-section-title">Contact & Personal</h3>
                 <div class="hrms-info-grid">
@@ -660,11 +904,17 @@ const formatExpDate = (d: string | null | undefined) => {
               </section>
 
               <section class="hrms-section">
-                <h3 class="hrms-section-title">Submission meta</h3>
+                <h3 class="hrms-section-title">Current role</h3>
                 <div class="hrms-info-grid">
                   <div class="hrms-info-item">
-                    <span class="hrms-info-label">Job</span>
-                    <span class="hrms-info-value">{{ viewingSubmission.job_title }}</span>
+                    <span class="hrms-info-label">Designation</span>
+                    <span class="hrms-info-value">
+                      {{ candidateDetail.current_designation ?? EMPTY }}
+                    </span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Company</span>
+                    <span class="hrms-info-value">{{ candidateDetail.current_company ?? EMPTY }}</span>
                   </div>
                   <div class="hrms-info-item">
                     <span class="hrms-info-label">Submitted by</span>
@@ -673,10 +923,6 @@ const formatExpDate = (d: string | null | undefined) => {
                   <div class="hrms-info-item">
                     <span class="hrms-info-label">Submitted on</span>
                     <span class="hrms-info-value">{{ formatDate(viewingSubmission.submitted_at) }}</span>
-                  </div>
-                  <div class="hrms-info-item">
-                    <span class="hrms-info-label">Stage</span>
-                    <span class="hrms-info-value">{{ viewingSubmission.current_stage ?? EMPTY }}</span>
                   </div>
                 </div>
               </section>
@@ -798,6 +1044,29 @@ const formatExpDate = (d: string | null | undefined) => {
               >
                 {{ downloadingClient ? 'Downloading…' : 'Download Approved' }}
               </button>
+              <button
+                v-if="approvedCount(selected) > 0"
+                type="button"
+                class="hrms-btn hrms-btn--sm"
+                :disabled="sharingEmail"
+                :title="
+                  emailConfigured
+                    ? 'Email approved profiles to client contacts'
+                    : 'Configure SMTP in backend/.env, or download Excel and send manually'
+                "
+                @click="openShareModal"
+              >
+                Share by Email
+              </button>
+              <button
+                v-if="approvedCount(selected) > 0"
+                type="button"
+                class="hrms-btn hrms-btn--sm hrms-btn--success"
+                :disabled="shortlisting"
+                @click="handleAddToPipeline()"
+              >
+                {{ shortlisting ? 'Adding…' : 'Add Approved to Pipeline' }}
+              </button>
             </div>
 
             <div class="hrms-tabs">
@@ -821,8 +1090,58 @@ const formatExpDate = (d: string | null | undefined) => {
                 <div class="submissions-job-meta">
                   <h3 class="hrms-section-title" style="margin: 0">{{ selectedJob.job_title }}</h3>
                   <span class="hrms-status-badge" :style="`--sc: ${jobStatusColor(selectedJob.status)}`">
-                    {{ selectedJob.status }}
+                    {{ formatEnum(selectedJob.status) }}
                   </span>
+                </div>
+
+                <div class="hrms-info-grid" style="margin-top: 14px">
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Assigned recruiter</span>
+                    <span class="hrms-info-value">
+                      {{ selectedJob.assigned_recruiter_name ?? EMPTY }}
+                    </span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Department</span>
+                    <span class="hrms-info-value">{{ selectedJob.department ?? EMPTY }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Location</span>
+                    <span class="hrms-info-value">{{ selectedJob.location ?? EMPTY }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Employment type</span>
+                    <span class="hrms-info-value">{{ formatEnum(selectedJob.employment_type) }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Work mode</span>
+                    <span class="hrms-info-value">{{ formatEnum(selectedJob.work_mode) }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Experience</span>
+                    <span class="hrms-info-value">{{ experienceLabel(selectedJob) }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Salary range</span>
+                    <span class="hrms-info-value">{{ salaryRangeLabel(selectedJob) }}</span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Open positions</span>
+                    <span class="hrms-info-value">
+                      {{ selectedJob.open_positions != null ? selectedJob.open_positions : EMPTY }}
+                    </span>
+                  </div>
+                  <div class="hrms-info-item">
+                    <span class="hrms-info-label">Priority</span>
+                    <span class="hrms-info-value">{{ formatEnum(selectedJob.priority) }}</span>
+                  </div>
+                </div>
+
+                <div v-if="selectedJob.job_description" class="submissions-job-desc-block">
+                  <span class="hrms-info-label">Job description</span>
+                  <p class="hrms-info-value submissions-job-description">
+                    {{ selectedJob.job_description }}
+                  </p>
                 </div>
 
                 <div class="hrms-tabs" style="margin-top: 12px">
@@ -957,6 +1276,48 @@ const formatExpDate = (d: string | null | undefined) => {
         </button>
       </template>
     </HrmsModal>
+
+    <HrmsModal v-model="showShareModal" title="Share approved profiles by email" size="md">
+      <p class="hrms-page-subtitle" style="margin-bottom: 14px">
+        Sends an Excel of approved candidate profiles to the client.
+        <template v-if="!emailConfigured">
+          SMTP is not configured — set <code>SMTP_HOST</code> / <code>SMTP_FROM</code> in
+          <code>backend/.env</code>, or download Excel and email it yourself.
+        </template>
+        Leave recipients blank to use primary client contact emails.
+      </p>
+      <div class="hrms-form-stack">
+        <label class="hrms-field">
+          <span>Recipient emails</span>
+          <input
+            v-model="shareEmails"
+            type="text"
+            class="hrms-input"
+            placeholder="hr@client.com, hiring@client.com"
+          />
+        </label>
+        <label class="hrms-field">
+          <span>Message (optional)</span>
+          <textarea
+            v-model="shareMessage"
+            class="hrms-input"
+            rows="4"
+            placeholder="Please review and share shortlisted candidates…"
+          />
+        </label>
+      </div>
+      <template #footer>
+        <button type="button" class="hrms-btn" @click="showShareModal = false">Cancel</button>
+        <button
+          type="button"
+          class="hrms-btn hrms-btn--primary"
+          :disabled="sharingEmail || !emailConfigured"
+          @click="handleShareApproved"
+        >
+          {{ sharingEmail ? 'Sending…' : 'Send email' }}
+        </button>
+      </template>
+    </HrmsModal>
   </div>
 </template>
 
@@ -967,11 +1328,37 @@ const formatExpDate = (d: string | null | undefined) => {
   font-size: 0.75em;
 }
 
+.hrms-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hrms-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
 .submissions-job-meta {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.submissions-job-desc-block {
+  margin-top: 14px;
+}
+
+.submissions-job-description {
+  white-space: pre-wrap;
+  margin-top: 6px;
+  line-height: 1.5;
+  color: var(--hrms-text-secondary);
+  font-size: 0.875rem;
 }
 
 .submissions-badges {

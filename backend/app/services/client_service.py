@@ -9,7 +9,7 @@ from app.api.schemas.client import (
     ClientStatusUpdate,
     ClientUpdateRequest,
 )
-from app.models.user_access import Client, ClientContact
+from app.models.user_access import Client, ClientContact, User
 
 
 def _client_query(db: Session):
@@ -27,7 +27,7 @@ def get_client(db: Session, client_id: uuid.UUID) -> Client:
     return client
 
 
-def create_client(db: Session, payload: ClientCreateRequest) -> Client:
+def create_client(db: Session, payload: ClientCreateRequest, actor: User | None = None) -> Client:
     submission_json = (
         json.dumps([f.model_dump() for f in payload.submission_format])
         if payload.submission_format
@@ -64,10 +64,31 @@ def create_client(db: Session, payload: ClientCreateRequest) -> Client:
         )
 
     db.commit()
-    return _client_query(db).filter(Client.id == client.id).one()
+    created = _client_query(db).filter(Client.id == client.id).one()
+    try:
+        from app.services.dashboard_events import WIDGETS_CLIENT, publish_dashboard_event
+
+        publish_dashboard_event(
+            "client.created",
+            WIDGETS_CLIENT,
+            {
+                "client_id": str(created.id),
+                "company_name": created.company_name,
+                "actor_name": (f"{actor.first_name} {actor.last_name}".strip() if actor else None),
+                "actor_email": (actor.email if actor else None),
+            },
+        )
+    except Exception:
+        pass
+    return created
 
 
-def update_client(db: Session, client_id: uuid.UUID, payload: ClientUpdateRequest) -> Client:
+def update_client(
+    db: Session,
+    client_id: uuid.UUID,
+    payload: ClientUpdateRequest,
+    actor: User | None = None,
+) -> Client:
     client = _client_query(db).filter(Client.id == client_id).first()
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
@@ -127,16 +148,54 @@ def update_client(db: Session, client_id: uuid.UUID, payload: ClientUpdateReques
                 )
 
     db.commit()
-    return _client_query(db).filter(Client.id == client_id).one()
+    updated = _client_query(db).filter(Client.id == client_id).one()
+    try:
+        from app.services.dashboard_events import WIDGETS_CLIENT, publish_dashboard_event
+
+        publish_dashboard_event(
+            "client.updated",
+            WIDGETS_CLIENT,
+            {
+                "client_id": str(updated.id),
+                "company_name": updated.company_name,
+                "actor_name": (f"{actor.first_name} {actor.last_name}".strip() if actor else None),
+                "actor_email": (actor.email if actor else None),
+            },
+        )
+    except Exception:
+        pass
+    return updated
 
 
-def update_client_status(db: Session, client_id: uuid.UUID, payload: ClientStatusUpdate) -> Client:
+def update_client_status(
+    db: Session,
+    client_id: uuid.UUID,
+    payload: ClientStatusUpdate,
+    actor: User | None = None,
+) -> Client:
     client = _client_query(db).filter(Client.id == client_id).first()
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
     client.status = payload.status
     db.commit()
-    return _client_query(db).filter(Client.id == client_id).one()
+    updated = _client_query(db).filter(Client.id == client_id).one()
+    try:
+        from app.services.dashboard_events import WIDGETS_CLIENT, publish_dashboard_event
+
+        publish_dashboard_event(
+            "client.updated",
+            WIDGETS_CLIENT,
+            {
+                "client_id": str(updated.id),
+                "status": updated.status,
+                "company_name": updated.company_name,
+                "actor_name": (f"{actor.first_name} {actor.last_name}".strip() if actor else None),
+                "actor_email": (actor.email if actor else None),
+            },
+        )
+    except Exception:
+        pass
+    return updated
 
 
 def serialize_client(client: Client) -> dict:

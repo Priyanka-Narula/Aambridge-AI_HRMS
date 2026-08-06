@@ -16,6 +16,8 @@ from app.core.deps import get_current_user, require_owner
 from app.models.user_access import User
 from app.services.job_requirement_service import (
     create_job_requirement,
+    get_job_pipeline_metric,
+    get_job_pipeline_metrics,
     get_job_requirement,
     list_job_requirements,
     serialize_job_requirement,
@@ -37,9 +39,11 @@ def get_job_requirements(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    items = list_job_requirements(db, current_user)
+    metrics = get_job_pipeline_metrics(db, {item.id for item in items})
     return [
-        serialize_job_requirement(item)
-        for item in list_job_requirements(db, current_user)
+        serialize_job_requirement(item, metrics[item.id])
+        for item in items
     ]
 
 
@@ -49,7 +53,8 @@ def create_job_requirement_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_owner),
 ):
-    return serialize_job_requirement(create_job_requirement(db, payload, current_user))
+    item = create_job_requirement(db, payload, current_user)
+    return serialize_job_requirement(item, get_job_pipeline_metric(db, item.id))
 
 
 @router.get("/{requirement_id}", response_model=JobRequirementListItem)
@@ -58,7 +63,8 @@ def get_job_requirement_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return serialize_job_requirement(get_job_requirement(db, requirement_id, current_user))
+    item = get_job_requirement(db, requirement_id, current_user)
+    return serialize_job_requirement(item, get_job_pipeline_metric(db, item.id))
 
 
 @router.put("/{requirement_id}", response_model=JobRequirementListItem)
@@ -68,9 +74,8 @@ def update_job_requirement_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_owner),
 ):
-    return serialize_job_requirement(
-        update_job_requirement(db, requirement_id, payload, current_user)
-    )
+    item = update_job_requirement(db, requirement_id, payload, current_user)
+    return serialize_job_requirement(item, get_job_pipeline_metric(db, item.id))
 
 
 @router.patch("/{requirement_id}/status", response_model=JobRequirementListItem)
@@ -80,9 +85,8 @@ def patch_job_requirement_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_owner),
 ):
-    return serialize_job_requirement(
-        update_job_requirement_status(db, requirement_id, payload, current_user)
-    )
+    item = update_job_requirement_status(db, requirement_id, payload, current_user)
+    return serialize_job_requirement(item, get_job_pipeline_metric(db, item.id))
 
 
 @router.post(

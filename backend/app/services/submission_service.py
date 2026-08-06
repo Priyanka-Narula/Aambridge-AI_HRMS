@@ -13,6 +13,10 @@ from app.models.candidate import Candidate
 from app.models.job_requirement import JobRequirement
 from app.models.pipeline import CandidateApplication, PipelineStage
 from app.models.user_access import Client, Recruiter, User
+from app.services.job_requirement_service import (
+    get_job_pipeline_metric,
+    is_job_fulfilled,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -214,15 +218,15 @@ def check_submission_eligibility(
     now = datetime.now(timezone.utc)
     client_id = job_requirement.client_id
 
-    # Rule A — same client, within 6 months
-    cutoff_6mo = now - timedelta(days=182)
+    # Rule A — same client, within 3 months
+    cutoff_3mo = now - timedelta(days=91)
     existing_same_client = (
         db.query(CandidateApplication)
         .join(JobRequirement, CandidateApplication.job_requirement_id == JobRequirement.id)
         .filter(
             CandidateApplication.candidate_id == candidate_id,
             JobRequirement.client_id == client_id,
-            CandidateApplication.submitted_at >= cutoff_6mo,
+            CandidateApplication.submitted_at >= cutoff_3mo,
         )
         .first()
     )
@@ -236,33 +240,33 @@ def check_submission_eligibility(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 f"This CV was already shared with {job_requirement.client.company_name} "
-                f"on {shared_date}. Cannot re-share within 6 months."
+                f"on {shared_date}. Cannot re-share within 3 months."
             ),
         )
 
-    # Rule B — different client, within 3 months, still in process
-    cutoff_3mo = now - timedelta(days=91)
-    existing_other = (
-        db.query(CandidateApplication, Client)
-        .join(JobRequirement, CandidateApplication.job_requirement_id == JobRequirement.id)
-        .join(Client, JobRequirement.client_id == Client.id)
-        .filter(
-            CandidateApplication.candidate_id == candidate_id,
-            JobRequirement.client_id != client_id,
-            CandidateApplication.submitted_at >= cutoff_3mo,
-            CandidateApplication.status.notin_(["rejected", "withdrawn"]),
-        )
-        .first()
-    )
-    if existing_other:
-        _, other_client = existing_other
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"Candidate is already in process with {other_client.company_name}. "
-                f"Cannot submit to another client within 3 months."
-            ),
-        )
+    # # Rule B — different client, within 3 months, still in process
+    # cutoff_3mo = now - timedelta(days=91)
+    # existing_other = (
+    #     db.query(CandidateApplication, Client)
+    #     .join(JobRequirement, CandidateApplication.job_requirement_id == JobRequirement.id)
+    #     .join(Client, JobRequirement.client_id == Client.id)
+    #     .filter(
+    #         CandidateApplication.candidate_id == candidate_id,
+    #         JobRequirement.client_id != client_id,
+    #         CandidateApplication.submitted_at >= cutoff_3mo,
+    #         CandidateApplication.status.notin_(["rejected", "withdrawn"]),
+    #     )
+    #     .first()
+    # )
+    # if existing_other:
+    #     _, other_client = existing_other
+    #     raise HTTPException(
+    #         status_code=status.HTTP_409_CONFLICT,
+    #         detail=(
+    #             f"Candidate is already in process with {other_client.company_name}. "
+    #             f"Cannot submit to another client within 3 months."
+    #         ),
+    #     )
 
 
 # ---------------------------------------------------------------------------
@@ -285,7 +289,27 @@ def submit_candidate(
             detail="You are not assigned to this job requirement",
         )
 
-    _load_candidate(db, candidate_id)
+    if jr.status != "open":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Candidate submissions are disabled because this job requirement is closed",
+        )
+
+    joined_candidates = get_job_pipeline_metric(db, jr.id)["joined_candidates"]
+    if is_job_fulfilled(jr, joined_candidates):
+        jr.status = "closed"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Candidate submissions are disabled because all open positions are filled",
+        )
+
+    candidate = _load_candidate(db, candidate_id)
+    if (candidate.candidate_status or "").lower() == "inactive":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Inactive candidates cannot be submitted to a job requirement",
+        )
 
     # Mandatory fields check — against the recruiter-filled submission_data
     client_fmt = jr.client.submission_format if jr.client else None
@@ -375,7 +399,27 @@ def approve_submission(
     app = _load_application(db, app_id)
     app.owner_status = action
     db.commit()
-    return _load_application_with_full_relations(db, app.id)
+    updated = _load_application_with_full_relations(db, app.id)
+    try:
+        from app.services.dashboard_events import (
+            WIDGETS_CANDIDATE_DECISION,
+            publish_dashboard_event,
+        )
+
+        event = "candidate.approved" if action == "approved" else "candidate.rejected"
+        publish_dashboard_event(
+            event,
+            WIDGETS_CANDIDATE_DECISION,
+            {
+                "application_id": str(app_id),
+                "action": action,
+                "actor_name": f"{current_user.first_name} {current_user.last_name}".strip(),
+                "actor_email": current_user.email,
+            },
+        )
+    except Exception:
+        pass
+    return updated
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +447,10 @@ def get_owner_dashboard(db: Session, current_user: User) -> list[dict]:
     if jr_ids:
         for jr in (
             db.query(JobRequirement)
-            .options(joinedload(JobRequirement.client))
+            .options(
+                joinedload(JobRequirement.client),
+                joinedload(JobRequirement.assignee),
+            )
             .filter(JobRequirement.id.in_(jr_ids))
             .all()
         ):
@@ -438,11 +485,29 @@ def get_owner_dashboard(db: Session, current_user: User) -> list[dict]:
                 serialize_submission(app, jr, candidate)
                 for app, _, candidate in job_to_apps.get(jr_id, [])
             ]
+            assignee = jr.assignee
+            assignee_name = None
+            if assignee:
+                assignee_name = f"{assignee.first_name} {assignee.last_name}".strip()
             jobs_out.append({
                 "job_requirement_id": jr.id,
                 "job_title": jr.job_title,
                 "status": jr.status,
                 "open_positions": jr.open_positions,
+                "department": jr.department,
+                "employment_type": jr.employment_type,
+                "work_mode": jr.work_mode,
+                "experience_min": float(jr.experience_min) if jr.experience_min is not None else None,
+                "experience_max": float(jr.experience_max) if jr.experience_max is not None else None,
+                "salary_min": float(jr.salary_min) if jr.salary_min is not None else None,
+                "salary_max": float(jr.salary_max) if jr.salary_max is not None else None,
+                "location": jr.location,
+                "priority": jr.priority,
+                "requirement_type": jr.requirement_type,
+                "job_description": jr.job_description,
+                "assigned_to": jr.assigned_to,
+                "assigned_recruiter_name": assignee_name,
+                "created_at": jr.created_at,
                 "submissions": submissions_out,
             })
         result.append({
@@ -751,6 +816,7 @@ def serialize_submission(
         "current_stage": stage_name,
         "status": app.status,
         "owner_status": app.owner_status,
+        "in_pipeline": bool(getattr(app, "in_pipeline", False)),
         "submission_data": stored_data,
     }
 

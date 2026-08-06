@@ -30,6 +30,7 @@ class CandidateSubmissionResponse(BaseModel):
     current_stage: str | None
     status: str
     owner_status: str
+    in_pipeline: bool = False
     submission_data: dict[str, Any] | None = None
 
 
@@ -38,6 +39,20 @@ class OwnerDashboardJob(BaseModel):
     job_title: str
     status: str
     open_positions: int | None
+    department: str | None = None
+    employment_type: str | None = None
+    work_mode: str | None = None
+    experience_min: float | None = None
+    experience_max: float | None = None
+    salary_min: float | None = None
+    salary_max: float | None = None
+    location: str | None = None
+    priority: str | None = None
+    requirement_type: str | None = None
+    job_description: str | None = None
+    assigned_to: uuid.UUID | None = None
+    assigned_recruiter_name: str | None = None
+    created_at: datetime | None = None
     submissions: list[CandidateSubmissionResponse]
 
 

@@ -1,4 +1,4 @@
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,10 +14,14 @@ from app.core.database import get_db
 from app.core.deps import get_current_user, require_owner
 from app.models.attendance import AttendanceRecord
 from app.models.user_access import Role, User
+from app.services.dashboard_events import publish_dashboard_event
 
 router = APIRouter(prefix="/api/v1/attendance", tags=["attendance"])
 
-_LATE_THRESHOLD = time(*[int(p) for p in settings.LATE_THRESHOLD.split(":")])
+# Fixed office timezone for all attendance decisions (UAE), regardless of
+# where the recruiter is physically located when they check in/out.
+_OFFICE_TZ = ZoneInfo(settings.OFFICE_TIMEZONE or "Asia/Dubai")
+_LATE_THRESHOLD = time(*[int(p) for p in settings.LATE_THRESHOLD.split(":")[:2]])
 
 
 @router.get("/policy", response_model=AttendancePolicyResponse)
@@ -26,24 +30,35 @@ def get_attendance_policy():
         checkin_expected=settings.CHECKIN_EXPECTED,
         checkout_expected=settings.CHECKOUT_EXPECTED,
         late_threshold=settings.LATE_THRESHOLD,
-        timezone=settings.OFFICE_TIMEZONE,
+        timezone=settings.OFFICE_TIMEZONE or "Asia/Dubai",
     )
 
 
 def _office_tz() -> ZoneInfo:
-    return ZoneInfo(settings.OFFICE_TIMEZONE)
+    return _OFFICE_TZ
 
 
-def _today_office() -> "date":  # noqa: F821
-    from datetime import date as _date  # local import to keep module-level clean
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Normalize DB datetimes to aware UTC before converting to UAE time."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _today_office() -> date:
+    """Calendar 'today' is always the current date in UAE (Asia/Dubai)."""
     return datetime.now(_office_tz()).date()
 
 
-def _compute_status(check_in_utc: datetime | None) -> str:
-    if check_in_utc is None:
+def _compute_status(check_in: datetime | None) -> str:
+    if check_in is None:
         return "absent"
-    local_time = check_in_utc.astimezone(_office_tz()).time()
-    return "on_time" if local_time <= _LATE_THRESHOLD else "late"
+    uae_time = _as_utc(check_in).astimezone(_office_tz()).time()
+    return "on_time" if uae_time <= _LATE_THRESHOLD else "late"
 
 
 def _get_or_create_record(db: Session, user_id, today) -> AttendanceRecord:
@@ -84,9 +99,15 @@ def check_in(
             status_code=status.HTTP_409_CONFLICT,
             detail="Already checked in today",
         )
-    record.check_in = datetime.now(timezone.utc)
+    # Persist UTC; late/on-time is always evaluated against UAE wall-clock.
+    record.check_in = _now_utc()
     db.commit()
     db.refresh(record)
+    publish_dashboard_event(
+        "attendance.checked_in",
+        ["activity_feed"],
+        {"user_id": str(current_user.id)},
+    )
     return _serialize(record, today)
 
 
@@ -113,9 +134,14 @@ def check_out(
             status_code=status.HTTP_409_CONFLICT,
             detail="Already checked out today",
         )
-    record.check_out = datetime.now(timezone.utc)
+    record.check_out = _now_utc()
     db.commit()
     db.refresh(record)
+    publish_dashboard_event(
+        "attendance.checked_out",
+        ["activity_feed"],
+        {"user_id": str(current_user.id)},
+    )
     return _serialize(record, today)
 
 

@@ -47,7 +47,6 @@ type FormState = {
   employment_type: string
   work_mode: string
   experience_min: string
-  experience_max: string
   salary_min: string
   salary_max: string
   open_positions: string
@@ -55,7 +54,6 @@ type FormState = {
   location: string
   priority: string
   requirement_type: string
-  status: JobRequirementStatus
 }
 
 const emptyForm = (): FormState => ({
@@ -66,7 +64,6 @@ const emptyForm = (): FormState => ({
   employment_type: '',
   work_mode: '',
   experience_min: '',
-  experience_max: '',
   salary_min: '',
   salary_max: '',
   open_positions: '',
@@ -74,7 +71,6 @@ const emptyForm = (): FormState => ({
   location: '',
   priority: '',
   requirement_type: '',
-  status: 'open',
 })
 
 const form = ref<FormState>(emptyForm())
@@ -122,7 +118,6 @@ function toPayload(): JobRequirementCreatePayload {
     employment_type: optionalText(form.value.employment_type),
     work_mode: optionalText(form.value.work_mode),
     experience_min: toNumberOrNull(form.value.experience_min),
-    experience_max: toNumberOrNull(form.value.experience_max),
     salary_min: toNumberOrNull(form.value.salary_min),
     salary_max: toNumberOrNull(form.value.salary_max),
     open_positions: toNumberOrNull(form.value.open_positions),
@@ -130,7 +125,6 @@ function toPayload(): JobRequirementCreatePayload {
     location: optionalText(form.value.location),
     priority: optionalText(form.value.priority),
     requirement_type: optionalText(form.value.requirement_type),
-    status: form.value.status,
   }
 }
 
@@ -143,7 +137,6 @@ function itemToForm(item: JobRequirementListItem): FormState {
     employment_type: item.employment_type ?? '',
     work_mode: item.work_mode ?? '',
     experience_min: item.experience_min != null ? String(item.experience_min) : '',
-    experience_max: item.experience_max != null ? String(item.experience_max) : '',
     salary_min: item.salary_min != null ? String(item.salary_min) : '',
     salary_max: item.salary_max != null ? String(item.salary_max) : '',
     open_positions: item.open_positions != null ? String(item.open_positions) : '',
@@ -151,7 +144,6 @@ function itemToForm(item: JobRequirementListItem): FormState {
     location: item.location ?? '',
     priority: item.priority ?? '',
     requirement_type: item.requirement_type ?? '',
-    status: (item.status as JobRequirementStatus) || 'open',
   }
 }
 
@@ -338,13 +330,20 @@ function experienceLabel(item: JobRequirementListItem): string {
               <span v-if="item.location">{{ item.location }}</span>
               <span v-if="item.priority">{{ item.priority }}</span>
             </div>
+            <div class="job-pipeline-metrics">
+              <span><strong>{{ item.pipeline_candidates }}</strong> in pipeline</span>
+              <span><strong>{{ item.joined_candidates }}</strong> joined</span>
+              <span>
+                <strong>{{ item.remaining_positions ?? EMPTY }}</strong> remaining
+              </span>
+            </div>
             <button
               type="button"
               class="hrms-btn hrms-btn--sm hrms-btn--primary"
               style="margin-top: 10px"
               @click.stop="router.push({ name: 'job-requirement-detail', params: { id: item.id } })"
             >
-              View / Submit Candidates
+              {{ item.submissions_enabled ? 'View / Submit Candidates' : 'View Candidates' }}
             </button>
           </div>
         </div>
@@ -447,6 +446,20 @@ function experienceLabel(item: JobRequirementListItem): string {
                 <span class="hrms-info-value">{{ orEmpty(selected.open_positions?.toString()) }}</span>
               </div>
               <div class="hrms-info-item">
+                <span class="hrms-info-label">Candidates in pipeline</span>
+                <span class="hrms-info-value">{{ selected.pipeline_candidates }}</span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Joined candidates</span>
+                <span class="hrms-info-value">
+                  {{ selected.joined_candidates }} / {{ selected.open_positions ?? EMPTY }}
+                </span>
+              </div>
+              <div class="hrms-info-item">
+                <span class="hrms-info-label">Positions remaining</span>
+                <span class="hrms-info-value">{{ selected.remaining_positions ?? EMPTY }}</span>
+              </div>
+              <div class="hrms-info-item">
                 <span class="hrms-info-label">Priority</span>
                 <span class="hrms-info-value">{{ orEmpty(selected.priority) }}</span>
               </div>
@@ -520,10 +533,6 @@ function experienceLabel(item: JobRequirementListItem): string {
           <input v-model="form.experience_min" class="hrms-input" type="number" min="0" step="0.5" />
         </label>
         <label class="hrms-field">
-          <span class="hrms-label">Experience max (yrs)</span>
-          <input v-model="form.experience_max" class="hrms-input" type="number" min="0" step="0.5" />
-        </label>
-        <label class="hrms-field">
           <span class="hrms-label">Open positions</span>
           <input v-model="form.open_positions" class="hrms-input" type="number" min="1" step="1" />
         </label>
@@ -534,15 +543,6 @@ function experienceLabel(item: JobRequirementListItem): string {
             <option value="high">High</option>
             <option value="medium">Medium</option>
             <option value="low">Low</option>
-          </select>
-        </label>
-        <label class="hrms-field">
-          <span class="hrms-label">Status</span>
-          <select v-model="form.status" class="hrms-input hrms-select">
-            <option value="open">Open</option>
-            <option value="on_hold">On hold</option>
-            <option value="filled">Filled</option>
-            <option value="closed">Closed</option>
           </select>
         </label>
         <label class="hrms-field hrms-field--wide">
@@ -565,3 +565,25 @@ function experienceLabel(item: JobRequirementListItem): string {
     </HrmsModal>
   </div>
 </template>
+
+<style scoped>
+.job-pipeline-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.job-pipeline-metrics span {
+  padding: 4px 8px;
+  border: 1px solid var(--hrms-border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: var(--hrms-text-muted);
+  background: var(--hrms-surface-muted);
+}
+
+.job-pipeline-metrics strong {
+  color: var(--hrms-text);
+}
+</style>

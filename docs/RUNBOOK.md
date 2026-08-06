@@ -80,9 +80,9 @@ If it still hangs, open **Task Manager** and end any stuck `com.docker.*` or `do
 ### MinIO upload/download issues
 
 - Confirm MinIO is running: `docker compose ps`
-- Check MinIO health: `http://127.0.0.1:9000/minio/health/live` should return `200`
+- Check MinIO health: `http://127.0.0.1:9009/minio/health/live` should return `200`
 - Check API health: `http://127.0.0.1:8000/health/storage`
-- Confirm `MINIO_ENDPOINT` in `backend/.env` is `127.0.0.1:9000` (matches `docker-compose.yml` port `9000:9000`)
+- Confirm `MINIO_ENDPOINT` in `backend/.env` is `127.0.0.1:9009` (matches `docker-compose.yml` port `9009:9000`; prefer `127.0.0.1` over `localhost` on Windows to avoid IPv6 delays)
 - If `minio-init` exited with an error, recreate the stack:
 
 ```powershell
@@ -99,6 +99,28 @@ docker compose up -d --force-recreate minio minio-init
 ```
 
 - If a resume returns 503, MinIO was down when requested — restart Docker services and retry. Re-upload the CV if the object was never stored.
+
+### Pipeline / share by email
+
+Hiring flow:
+
+1. Recruiter submits candidate → **Submissions** (owner review)
+2. Owner approves → **Download Approved** or **Share by Email** to client
+3. After approval → use **Add to Pipeline** (stage = Applied; not shown on Pipeline until then)
+4. After client shortlist feedback → move **Applied → Shortlisted**, then Screening → Interview → Offer → Joined
+
+Email sharing needs SMTP in `backend/.env`:
+
+```
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=...
+SMTP_PASSWORD=...
+SMTP_FROM=talent@aambridge.ai
+SMTP_USE_TLS=true
+```
+
+Without SMTP, use **Download Approved** and send the Excel manually.
 
 ### Frontend “Unauthorized” redirect issues
 

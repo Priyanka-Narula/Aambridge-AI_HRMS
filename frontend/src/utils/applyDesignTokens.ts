@@ -42,6 +42,7 @@ export function applyDesignTokens(root: HTMLElement = document.documentElement):
     '--hrms-accent-gradient': colors.accentGradient,
     '--hrms-sidebar-gradient': colors.sidebarGradient,
     '--hrms-sidebar-width': layout.sidebarWidth,
+    '--hrms-sidebar-collapsed-width': layout.sidebarCollapsedWidth,
     '--hrms-topbar-height': layout.topbarHeight,
     '--hrms-footer-height': layout.footerHeight,
     '--hrms-page-max-width': layout.pageMaxWidth,

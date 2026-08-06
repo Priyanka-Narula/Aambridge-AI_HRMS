@@ -100,6 +100,11 @@ function emptyForm(): ClientCreatePayload {
 
 const form = ref<ClientCreatePayload>(emptyForm())
 
+/** Sentinel value for the Industry select when the user wants to type a new one. */
+const INDUSTRY_NEW = '__new__'
+const industrySelection = ref('')
+const newIndustryName = ref('')
+
 // ---------------------------------------------------------------------------
 // Computed
 // ---------------------------------------------------------------------------
@@ -114,9 +119,52 @@ const filteredClients = computed(() => {
   )
 })
 
+const existingIndustries = computed(() => {
+  const values = new Set<string>()
+  for (const client of clients.value) {
+    const industry = client.industry?.trim()
+    if (industry) values.add(industry)
+  }
+  return [...values].sort((a, b) => a.localeCompare(b))
+})
+
 const modalTitle = computed(() =>
   editingClient.value ? `Edit — ${editingClient.value.company_name}` : 'Add Client',
 )
+
+function syncIndustrySelection(industry: string | null | undefined) {
+  const value = industry?.trim() || ''
+  if (!value) {
+    industrySelection.value = existingIndustries.value.length === 0 ? INDUSTRY_NEW : ''
+    newIndustryName.value = ''
+    form.value.industry = null
+    return
+  }
+  if (existingIndustries.value.includes(value)) {
+    industrySelection.value = value
+    newIndustryName.value = ''
+    form.value.industry = value
+    return
+  }
+  industrySelection.value = INDUSTRY_NEW
+  newIndustryName.value = value
+  form.value.industry = value
+}
+
+function onIndustrySelect(value: string) {
+  industrySelection.value = value
+  if (value === INDUSTRY_NEW) {
+    form.value.industry = newIndustryName.value.trim() || null
+    return
+  }
+  newIndustryName.value = ''
+  form.value.industry = value || null
+}
+
+function onNewIndustryInput(value: string) {
+  newIndustryName.value = value
+  form.value.industry = value.trim() || null
+}
 
 // ---------------------------------------------------------------------------
 // Template builder helpers
@@ -194,6 +242,7 @@ function openCreate() {
   editingClient.value = null
   form.value = emptyForm()
   selectedFields.value = {}
+  syncIndustrySelection(null)
   showDialog.value = true
 }
 
@@ -218,6 +267,7 @@ function openEdit(client?: ClientListItem) {
         : [emptyContact()],
   }
   selectedFields.value = hydrateSelectedFields(target.submission_format)
+  syncIndustrySelection(target.industry)
   showDialog.value = true
 }
 
@@ -240,8 +290,14 @@ async function submitClient() {
   error.value = ''
   success.value = ''
   try {
+    const industry =
+      industrySelection.value === INDUSTRY_NEW
+        ? newIndustryName.value.trim() || null
+        : industrySelection.value.trim() || null
+
     const payload: ClientCreatePayload = {
       ...form.value,
+      industry,
       submission_format: buildSubmissionFormat().length > 0 ? buildSubmissionFormat() : null,
     }
 
@@ -510,10 +566,34 @@ async function toggleStatus(client: ClientListItem) {
             <span class="hrms-label">Company name <span class="hrms-required">*</span></span>
             <input v-model="form.company_name" class="hrms-input" type="text" required />
           </label>
-          <label class="hrms-field">
+          <div class="hrms-field">
             <span class="hrms-label">Industry</span>
-            <input v-model="form.industry" class="hrms-input" type="text" />
-          </label>
+            <select
+              class="hrms-input hrms-select"
+              :value="industrySelection"
+              aria-label="Select industry"
+              @change="onIndustrySelect(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-if="existingIndustries.length > 0" value="">Select industry</option>
+              <option
+                v-for="item in existingIndustries"
+                :key="item"
+                :value="item"
+              >
+                {{ item }}
+              </option>
+              <option :value="INDUSTRY_NEW">+ New industry</option>
+            </select>
+            <input
+              v-if="industrySelection === INDUSTRY_NEW"
+              class="hrms-input clients-industry-new"
+              type="text"
+              :value="newIndustryName"
+              placeholder="Type new industry"
+              aria-label="New industry name"
+              @input="onNewIndustryInput(($event.target as HTMLInputElement).value)"
+            />
+          </div>
           <label class="hrms-field">
             <span class="hrms-label">Location</span>
             <input v-model="form.location" class="hrms-input" type="text" />
@@ -688,6 +768,10 @@ async function toggleStatus(client: ClientListItem) {
 /* ---- Modal sections ---- */
 .clients-section {
   margin-bottom: 2rem;
+}
+
+.clients-industry-new {
+  margin-top: 0.5rem;
 }
 
 .clients-section:last-child {

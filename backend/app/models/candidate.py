@@ -31,9 +31,11 @@ class Candidate(Base, TimestampMixin):
     expected_ctc: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     notice_period: Mapped[str | None] = mapped_column(String(50))
     resume_url: Mapped[str | None] = mapped_column(String(500))
-    candidate_status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    candidate_status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="active", index=True
+    )
     source: Mapped[str | None] = mapped_column(String(100))
-    created_by: Mapped[str | None] = mapped_column(String(255))
+    created_by: Mapped[str | None] = mapped_column(String(255), index=True)
     uae_experience_years: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
     industry: Mapped[str | None] = mapped_column(String(100))
 

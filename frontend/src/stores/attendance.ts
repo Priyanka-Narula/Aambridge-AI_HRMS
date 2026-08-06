@@ -55,6 +55,7 @@ export const useAttendanceStore = defineStore('attendance', () => {
     try {
       policy.value = await attendanceApi.fetchPolicy()
     } catch {
+      // Fallback still pins attendance rules to UAE office time.
       policy.value = {
         checkin_expected: '09:00',
         checkout_expected: '18:30',

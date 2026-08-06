@@ -13,11 +13,13 @@ depends_on = None
 DEFAULT_ROLES = ["admin", "recruiter", "manager", "client"]
 DEFAULT_PIPELINE_STAGES = [
     ("Applied", 1),
-    ("Screening", 2),
-    ("Interview", 3),
-    ("Offer", 4),
-    ("Placed", 5),
-    ("Rejected", 6),
+    ("Shortlisted", 2),
+    ("Screening", 3),
+    ("Interview", 4),
+    ("Offer", 5),
+    ("Joined", 6),
+    ("On Hold", 7),
+    ("Rejected", 8),
 ]
 
 
@@ -51,7 +53,8 @@ def downgrade() -> None:
     op.execute(
         sa.text(
             "DELETE FROM pipeline_stages WHERE name IN "
-            "('Applied', 'Screening', 'Interview', 'Offer', 'Placed', 'Rejected')"
+            "('Applied', 'Shortlisted', 'Screening', 'Interview', 'Offer', "
+            "'Joined', 'Placed', 'On Hold', 'Rejected')"
         )
     )
     op.execute(

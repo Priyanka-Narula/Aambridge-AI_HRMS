@@ -22,6 +22,11 @@ This repository contains everything needed to run the system locally for develop
   - Create recruiter accounts (Owner)
   - Update recruiter profiles (Owner)
   - List + **expandable detail panel** + edit
+- **Analytics dashboards**
+  - Owner Executive Command Center with business KPIs, hiring funnel, recruiter performance, workload, client/job health, activity, and alerts
+  - Recruiter performance cockpit with today's priorities, outcome KPIs, personal funnel, team rank and median benchmark, action queue, at-risk jobs, and six-month trends
+  - Healthy competition scoring prioritizes placements, interviews, offer acceptance, and hiring speed; candidate-upload volume and attendance are excluded
+  - Live refresh through authenticated dashboard WebSocket events
 - **Job Requirements**
   - Owner creates job openings linked to a client and assigns them to a recruiter
   - Fields: title, department, employment type, work mode, experience range, salary range, open positions, job description, location, priority, requirement type, status
@@ -82,7 +87,7 @@ Local URLs:
 - Frontend: `http://localhost:5173`
 - Backend API: `http://127.0.0.1:8000`
 - API Docs (Swagger): `http://127.0.0.1:8000/docs`
-- MinIO Console: `http://localhost:9001` (login: `hrms` / `hrms_minio_secret`) — API on port `9000`
+- MinIO Console: `http://localhost:9001` (login: `hrms` / `hrms_minio_secret`) — API on port `9009`
 
 When done:
 
@@ -104,13 +109,12 @@ backend/
   alembic/
     versions/              # migrations (001–008)
   app/
-    api/routes/            # auth, users, clients, candidates, cv, attendance,
-                           #   job_requirements, submissions
-    api/schemas/           # pydantic schemas (incl. job_requirement, submission)
+    api/routes/            # auth, users, clients, candidates, attendance,
+                           #   job requirements, submissions, dashboards
+    api/schemas/           # Pydantic API contracts, including dashboard responses
     core/                  # config, database, auth deps
     models/                # SQLAlchemy models (incl. job_requirement, pipeline)
-    services/              # business logic (incl. job_requirement_service,
-                           #   submission_service)
+    services/              # business logic, analytics, and dashboard aggregates
     main.py                # FastAPI app entry
   .env.example
   requirements.txt
@@ -118,7 +122,7 @@ frontend/
   src/
     api/                   # API clients (incl. jobRequirements.ts, submissions.ts)
     assets/                # styling + logo
-    components/            # UI + domain components
+    components/            # UI, domain components, and dashboard modules
     config/                # navigation
     stores/                # Pinia stores
     types/                 # TS types (incl. jobRequirement.ts)
@@ -137,7 +141,7 @@ Set these in `backend/.env` (never commit `.env`).
   - `DATABASE_URL` (default: `postgresql://hrms:hrms@localhost:5433/hrms`)
   - `DB_ECHO` (default: `false`)
 - **MinIO / CV storage**
-  - `MINIO_ENDPOINT` (default: `localhost:9000`)
+  - `MINIO_ENDPOINT` (default: `127.0.0.1:9009`)
   - `MINIO_ACCESS_KEY` (default: `hrms`)
   - `MINIO_SECRET_KEY` (default: `hrms_minio_secret`)
   - `MINIO_BUCKET` (default: `hrms-cvs`)
@@ -166,6 +170,7 @@ See `docs/` for the full documentation set:
 - `docs/API.md` — API surface and contracts (auth, users, clients, candidates, attendance, job requirements, submissions)
 - `docs/SECURITY.md` — authentication, RBAC, secrets handling, and security notes
 - `docs/RUNBOOK.md` — operations, troubleshooting, and production checklist
+- `docs/DASHBOARD_ANALYTICS.md` — dashboard metric definitions, attribution rules, date semantics, and API behavior
 
 ## Contributing / development notes
 

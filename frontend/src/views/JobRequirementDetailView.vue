@@ -24,7 +24,7 @@ const loading = ref(true)
 const loadingSubmissions = ref(false)
 const error = ref('')
 const success = ref('')
-const activeTab = ref<'details' | 'submissions'>('details')
+const activeTab = ref<'details' | 'pipeline' | 'submissions'>('details')
 
 // ── Submit modal state ─────────────────────────────────────────────────────
 const showSubmitModal = ref(false)
@@ -134,11 +134,25 @@ function preFillFromCandidate(candidate: Candidate, fields: SubmissionField[]): 
 const clientFields = computed<SubmissionField[]>(() => job.value?.client_submission_format ?? [])
 const requiredFields = computed(() => clientFields.value.filter((f) => f.required))
 const hasSubmissionTemplate = computed(() => clientFields.value.length > 0)
+const pipelineSubmissions = computed(() =>
+  submissions.value.filter((submission) => submission.in_pipeline),
+)
+const submissionDisabledReason = computed(() => {
+  if (!job.value || job.value.submissions_enabled) return ''
+  if (
+    job.value.open_positions != null &&
+    job.value.joined_candidates >= job.value.open_positions
+  ) {
+    return `All ${job.value.open_positions} positions are filled. Candidate submissions are disabled.`
+  }
+  return `Candidate submissions are disabled while this job is ${job.value.status}.`
+})
 
 const filteredCandidates = computed(() => {
+  const active = allCandidates.value.filter((c) => c.candidate_status !== 'inactive')
   const q = candidateSearch.value.trim().toLowerCase()
-  if (!q) return allCandidates.value.slice(0, 20)
-  return allCandidates.value
+  if (!q) return active.slice(0, 20)
+  return active
     .filter(
       (c) =>
         `${c.first_name} ${c.last_name}`.toLowerCase().includes(q) ||
@@ -196,6 +210,10 @@ async function refreshSubmissions() {
 
 // ── Modal flow ─────────────────────────────────────────────────────────────
 function openSubmitModal() {
+  if (!job.value?.submissions_enabled) {
+    error.value = submissionDisabledReason.value
+    return
+  }
   selectedCandidate.value = null
   candidateSearch.value = ''
   submitError.value = ''
@@ -236,6 +254,7 @@ async function doSubmit() {
   // If there are still empty required fields, scroll the first one into view
   if (missingRequired.value.length > 0) {
     const firstMissing = missingRequired.value[0]
+    if (!firstMissing) return
     const el = modalBodyRef.value?.querySelector<HTMLElement>(
       `[data-field="${CSS.escape(firstMissing.field)}"]`,
     )
@@ -252,6 +271,7 @@ async function doSubmit() {
       formValues.value,
     )
     submissions.value = [sub, ...submissions.value]
+    job.value = await fetchJobRequirement(jobId.value)
     showSubmitModal.value = false
     success.value = `${selectedCandidate.value.first_name} ${selectedCandidate.value.last_name} submitted successfully`
     activeTab.value = 'submissions'
@@ -322,7 +342,7 @@ const fieldInputType = (f: SubmissionField): string => {
   return 'text'
 }
 
-const fieldInputMode = (f: SubmissionField): string | undefined => {
+const fieldInputMode = (f: SubmissionField): 'decimal' | undefined => {
   const t = (f.type || '').toLowerCase()
   return t === 'number' || t === 'numeric' ? 'decimal' : undefined
 }
@@ -371,9 +391,38 @@ const isLongText = (f: SubmissionField): boolean => {
           </div>
         </div>
         <div class="jrd-hero__actions">
-          <button type="button" class="hrms-btn hrms-btn--primary" @click="openSubmitModal">
+          <button
+            type="button"
+            class="hrms-btn hrms-btn--primary"
+            :disabled="!job.submissions_enabled"
+            :title="submissionDisabledReason || 'Submit a candidate'"
+            @click="openSubmitModal"
+          >
             Submit Candidate
           </button>
+        </div>
+      </div>
+
+      <HrmsAlert v-if="submissionDisabledReason" type="warning">
+        {{ submissionDisabledReason }}
+      </HrmsAlert>
+
+      <div class="jrd-pipeline-summary">
+        <div class="jrd-pipeline-stat">
+          <span>Submitted</span>
+          <strong>{{ job.submitted_candidates }}</strong>
+        </div>
+        <div class="jrd-pipeline-stat">
+          <span>In pipeline</span>
+          <strong>{{ job.pipeline_candidates }}</strong>
+        </div>
+        <div class="jrd-pipeline-stat">
+          <span>Joined</span>
+          <strong>{{ job.joined_candidates }} / {{ job.open_positions ?? EMPTY }}</strong>
+        </div>
+        <div class="jrd-pipeline-stat">
+          <span>Positions remaining</span>
+          <strong>{{ job.remaining_positions ?? EMPTY }}</strong>
         </div>
       </div>
 
@@ -388,12 +437,55 @@ const isLongText = (f: SubmissionField): boolean => {
         </button>
         <button
           class="jrd-tab"
+          :class="{ 'jrd-tab--active': activeTab === 'pipeline' }"
+          @click="activeTab = 'pipeline'; refreshSubmissions()"
+        >
+          Pipeline Candidates
+          <span class="jrd-tab__count">{{ job.pipeline_candidates }}</span>
+        </button>
+        <button
+          class="jrd-tab"
           :class="{ 'jrd-tab--active': activeTab === 'submissions' }"
           @click="activeTab = 'submissions'; refreshSubmissions()"
         >
           Submitted Candidates
           <span class="jrd-tab__count">{{ submissions.length }}</span>
         </button>
+      </div>
+
+      <!-- Pipeline candidates tab -->
+      <div v-if="activeTab === 'pipeline'" class="hrms-card jrd-section">
+        <div v-if="loadingSubmissions" class="hrms-loading">Loading pipeline candidates…</div>
+        <div v-else-if="pipelineSubmissions.length === 0" class="hrms-empty">
+          <p>No candidates have been added to this job's pipeline yet.</p>
+        </div>
+        <table v-else class="jrd-table">
+          <thead>
+            <tr>
+              <th>Candidate</th>
+              <th>Email</th>
+              <th>Current Stage</th>
+              <th>Submitted By</th>
+              <th>Submitted On</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="sub in pipelineSubmissions" :key="sub.id">
+              <td class="jrd-table__name">{{ sub.candidate_name }}</td>
+              <td>{{ sub.candidate_email }}</td>
+              <td>
+                <span
+                  class="hrms-status-badge"
+                  :style="`--sc: ${sub.current_stage === 'Joined' ? 'var(--hrms-success)' : 'var(--hrms-primary)'}`"
+                >
+                  {{ sub.current_stage ?? EMPTY }}
+                </span>
+              </td>
+              <td>{{ sub.submitted_by_name ?? EMPTY }}</td>
+              <td>{{ formatDate(sub.submitted_at) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Details tab -->
@@ -709,6 +801,32 @@ const isLongText = (f: SubmissionField): boolean => {
   flex-wrap: wrap;
 }
 
+.jrd-pipeline-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.jrd-pipeline-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--hrms-border);
+  border-radius: var(--hrms-radius-md);
+  background: var(--hrms-surface-elevated);
+}
+
+.jrd-pipeline-stat span {
+  color: var(--hrms-text-muted);
+  font-size: 0.75rem;
+}
+
+.jrd-pipeline-stat strong {
+  color: var(--hrms-text);
+  font-size: 1.05rem;
+}
+
 .jrd-tabs {
   display: flex;
   gap: 4px;
@@ -823,6 +941,12 @@ const isLongText = (f: SubmissionField): boolean => {
 
 .jrd-table__name {
   font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .jrd-pipeline-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* Modal steps */

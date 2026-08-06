@@ -27,7 +27,7 @@ services:
       MINIO_ROOT_USER: hrms
       MINIO_ROOT_PASSWORD: hrms_minio_secret
     ports:
-      - "9000:9000"
+      - "9009:9000"
       - "9001:9090"
     volumes:
       - minio_data:/data
