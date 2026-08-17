@@ -18,9 +18,6 @@ export function initials(first: string, last: string): string {
   return `${first[0] ?? ''}${last[0] ?? ''}`.toUpperCase()
 }
 
-/** Fixed office timezone for attendance (UAE). */
-export const OFFICE_TIMEZONE = 'Asia/Dubai'
-
 export function formatOfficeTime(hhmm: string): string {
   // Policy times are already UAE wall-clock (e.g. "09:15") — format as-is.
   const [hours = 0, minutes = 0] = hhmm.split(':').map((part) => Number(part))
@@ -36,11 +33,19 @@ export function formatUaeTime(
     minute: '2-digit',
     hour12: true,
   },
+  timeZone: string = OFFICE_TIMEZONE,
 ): string {
   if (!iso) return '—'
   const d = typeof iso === 'string' ? new Date(iso) : iso
   if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleTimeString('en-AE', { ...opts, timeZone: OFFICE_TIMEZONE })
+  return d.toLocaleTimeString('en-AE', { ...opts, timeZone })
+}
+
+/** Office-local hour (0-23), used to pick a time-of-day greeting. */
+export function uaeHour(date: Date = new Date(), timeZone: string = OFFICE_TIMEZONE): number {
+  return Number(
+    new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone }).format(date),
+  )
 }
 
 export function formatUaeClock(date: Date = new Date()): string {

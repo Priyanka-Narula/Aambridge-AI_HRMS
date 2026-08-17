@@ -9,8 +9,13 @@ import { useAttendanceStore } from '@/stores/attendance'
 import { useAuthStore } from '@/stores/auth'
 import { useDashboardLiveStore } from '@/stores/dashboardLive'
 import type { AnalyticsDashboard, DashboardWsEvent } from '@/types/dashboard'
-import { formatOfficeTime, formatUaeClock, formatUaeTime, OFFICE_TIMEZONE } from '@/utils/format'
-import { formatOfficeTime, formatUaetime, OFFICE_TIMEZONE, uaeHour } from '@/utils/format'
+import {
+  formatOfficeTime,
+  formatUaeClock,
+  formatUaeTime,
+  OFFICE_TIMEZONE,
+  uaeHour,
+} from '@/utils/format'
 
 const auth = useAuthStore()
 const attendance = useAttendanceStore()
@@ -61,8 +66,6 @@ const heroSubtitle = computed(() =>
     ? 'Understand business health, recruiter load, and what needs action today.'
     : "Here's your personal hiring snapshot for today.",
 )
-// ── Live clock (always UAE / Dubai) ───────────────────────────────────────────
-let clockTimer: ReturnType<typeof setInterval>
 
 const kpiMeta: Record<string, { icon: string; hint: string }> = {
   'Total Candidates': { icon: '◉', hint: 'Overall talent pool' },
@@ -194,11 +197,8 @@ watch(
   () => {
     bumpCommandCenterRefresh()
   },
-const currentTime = computed(() =>
-  formatUaetime(now.value, { hour: '2-digit', minute: '2-digit', second: '2-digit' }, officeTz.value),
 )
 
-const now = ref(new Date())
 let clockTimer: ReturnType<typeof setInterval>
 
 function onVisible() {
@@ -227,9 +227,6 @@ onUnmounted(() => {
 
 const checkedIn = computed(() => !!attendance.myRecord?.check_in)
 const checkedOut = computed(() => !!attendance.myRecord?.check_out)
-const officeTimezone = computed(
-  () => attendance.policy?.timezone || OFFICE_TIMEZONE,
-)
 const currentTime = computed(() => formatUaeClock(now.value))
 
 const teamAttendanceStats = computed(() => {
@@ -244,7 +241,7 @@ const teamAttendanceStats = computed(() => {
 const teamAttendancePreview = computed(() => attendance.allRecords.slice(0, 8))
 function formatTime(iso: string | null | undefined): string {
   if (!iso) return '—'
-  return formatUaetime(iso, { hour: '2-digit', minute: '2-digit' }, officeTz.value)
+  return formatUaeTime(iso, { hour: '2-digit', minute: '2-digit' }, officeTz.value)
 }
 
 async function handleCheckIn() {
@@ -310,7 +307,7 @@ const statusClass: Record<string, string> = {
         </p>
         <p v-if="attendance.policy" class="checkin__hint">
           Late after {{ formatOfficeTime(attendance.policy.late_threshold) }}
-          ({{ officeTimezone }})
+          ({{ officeTz }})
         </p>
       </div>
     </header>
