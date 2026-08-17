@@ -1,0 +1,122 @@
+databases:
+  - name: aambridge-db
+    plan: basic-256mb
+    region: frankfurt
+    databaseName: hrms
+    user: hrms
+
+services:
+  # Object storage for candidate CVs. Not reachable from the public internet;
+  # only the API talks to it, over Render's private network.
+  - type: pserv
+    name: aambridge-minio
+    runtime: image
+    plan: starter
+    region: frankfurt
+    image:
+      url: docker.io/minio/minio:RELEASE.2025-01-20T14-49-07Z
+    dockerCommand: server /data --address :9000 --console-address :9090
+    disk:
+      name: minio-data
+      mountPath: /data
+      sizeGB: 10
+    envVars:
+      # Pins the port Render advertises on the private network, so it can't
+      # latch onto the console port instead.
+      - key: PORT
+        value: 9000
+      - key: MINIO_ROOT_USER
+        value: hrms
+      - key: MINIO_ROOT_PASSWORD
+        generateValue: true
+
+  - type: web
+    name: aambridge-api
+    runtime: python
+    plan: starter
+    region: frankfurt
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    preDeployCommand: alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: aambridge-db
+          property: connectionString
+      - key: DB_ECHO
+        value: false
+
+      # hostport resolves to "aambridge-minio:9000" on the private network.
+      - key: MINIO_ENDPOINT
+        fromService:
+          name: aambridge-minio
+          type: pserv
+          property: hostport
+      - key: MINIO_ACCESS_KEY
+        fromService:
+          name: aambridge-minio
+          type: pserv
+          envVarKey: MINIO_ROOT_USER
+      - key: MINIO_SECRET_KEY
+        fromService:
+          name: aambridge-minio
+          type: pserv
+          envVarKey: MINIO_ROOT_PASSWORD
+      - key: MINIO_BUCKET
+        value: hrms-cvs
+      # Traffic never leaves Render's private network, so TLS is not required.
+      - key: MINIO_SECURE
+        value: false
+
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 480
+
+      # Set to the Vercel deployment URL, e.g. https://aambridge.vercel.app
+      - key: CORS_ORIGINS
+        sync: false
+
+      - key: BOOTSTRAP_OWNER_EMAIL
+        sync: false
+      - key: BOOTSTRAP_OWNER_PASSWORD
+        sync: false
+      - key: BOOTSTRAP_OWNER_FIRST_NAME
+        value: Platform
+      - key: BOOTSTRAP_OWNER_LAST_NAME
+        value: Owner
+
+      - key: OFFICE_TIMEZONE
+        value: Asia/Dubai
+      - key: CHECKIN_EXPECTED
+        value: "09:00"
+      - key: CHECKOUT_EXPECTED
+        value: "18:30"
+      - key: LATE_THRESHOLD
+        value: "09:15"
+
+      # Without this, CV parsing silently falls back to regex extraction.
+      - key: HF_API_TOKEN
+        sync: false
+
+      - key: COMPANY_NAME
+        value: Aambridge
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: SMTP_USE_TLS
+        value: true

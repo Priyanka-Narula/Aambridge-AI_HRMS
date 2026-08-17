@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://hrms:hrms@localhost:5433/hrms"
     DB_ECHO: bool = False
 
+    # Comma-separated browser origins allowed to call the API.
+    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+
     MINIO_ENDPOINT: str = "127.0.0.1:9009"
     MINIO_ACCESS_KEY: str = "hrms"
     MINIO_SECRET_KEY: str = "hrms_minio_secret"
@@ -52,6 +55,10 @@ class Settings(BaseSettings):
     SMTP_FROM: str | None = None
     SMTP_USE_TLS: bool = True
     COMPANY_NAME: str = "Aambridge"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
 
 settings = Settings()
